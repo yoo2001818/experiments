@@ -35,6 +35,9 @@ index_option: {
   COMMENT 'string'
 }
 
+index_type:
+    USING {BTREE | HASH}
+
 DROP TABLE [IF EXISTS]
     tbl_name [, tbl_name] ...
 

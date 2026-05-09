@@ -7,18 +7,22 @@ All binary encodings for integers assume little-endian unless specified.
 - minidb.db/
   - catalog.json
   - tables/
-    - {table_name}/
+    - {table_storage_name}/
       - rows.bin
       - indexes/
-        - {index_name}.bin
+        - {index_storage_name}.bin
 
 ## Catalog JSON
 
 ```json
 {
   "version": 1,
-  "tables": {
-    "table_name": {
+  "next_table_storage_id": 2,
+  "tables": [
+    {
+      "name": "users",
+      "storage_name": "t_00000001",
+      "next_index_storage_id": 2,
       "columns": [
         {
           "name": "id",
@@ -42,6 +46,7 @@ All binary encodings for integers assume little-endian unless specified.
       "indexes": [
         {
           "name": "index_name",
+          "storage_name": "i_00000001",
           "unique": false,
           "primary_key": false,
           "type": "BTREE",
@@ -49,7 +54,7 @@ All binary encodings for integers assume little-endian unless specified.
         }
       ]
     }
-  }
+  ]
 }
 ```
 

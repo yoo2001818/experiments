@@ -1,5 +1,6 @@
 #pragma once
 
+#include "minidb/enum.hpp"
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -25,11 +26,6 @@ enum class Nullability {
   Unspecified,
   Null,
   NotNull,
-};
-
-enum class SortDirection {
-  Asc,
-  Desc,
 };
 
 struct KeyPart {
@@ -86,11 +82,7 @@ struct DropIndexStmt {
   std::string table_name;
 };
 
-using DdlStatement = std::variant<
-  CreateTableStmt,
-  CreateIndexStmt,
-  DropTableStmt,
-  DropIndexStmt
->;
+using DdlStatement = std::variant<CreateTableStmt, CreateIndexStmt,
+                                  DropTableStmt, DropIndexStmt>;
 
 } // namespace minidb

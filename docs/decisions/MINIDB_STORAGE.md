@@ -23,23 +23,24 @@ All binary encodings for integers assume little-endian unless specified.
       "name": "users",
       "storage_name": "t_00000001",
       "next_index_storage_id": 2,
+      "comment": null,
       "columns": [
         {
           "name": "id",
           "type": "INTEGER",
-          "size": null,
-          "nullable": false,
-          "unique": false,
-          "primary_key": false,
+          "type_size": null,
+          "is_nullable": false,
+          "is_unique": false,
+          "is_primary_key": false,
           "comment": null
         },
         {
           "name": "name",
           "type": "CHAR",
-          "size": 16,
-          "nullable": false,
-          "unique": false,
-          "primary_key": false,
+          "type_size": 16,
+          "is_nullable": false,
+          "is_unique": false,
+          "is_primary_key": false,
           "comment": null
         }
       ],
@@ -47,9 +48,10 @@ All binary encodings for integers assume little-endian unless specified.
         {
           "name": "index_name",
           "storage_name": "i_00000001",
-          "unique": false,
-          "primary_key": false,
+          "is_unique": false,
+          "is_primary_key": false,
           "type": "BTREE",
+          "comment": null,
           "keys": [{ "column": "name", "direction": "ASC" }]
         }
       ]

@@ -12,8 +12,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(minidb_core
+  src/minidb/catalog.cpp
+  src/minidb/database.cpp
   src/minidb/ddl_parser.cpp
   src/minidb/greeting.cpp
+  src/minidb/storage.cpp
+  src/minidb/table.cpp
+  src/minidb/util_binary.cpp
 )
 target_include_directories(minidb_core PUBLIC include)
 
@@ -26,6 +31,8 @@ if(BUILD_TESTING)
   find_package(Catch2 3 REQUIRED)
 
   add_executable(minidb_tests
+    tests/catalog_test.cpp
+    tests/database_test.cpp
     tests/ddl_ast_test.cpp
     tests/ddl_parser_test.cpp
     tests/greeting_test.cpp

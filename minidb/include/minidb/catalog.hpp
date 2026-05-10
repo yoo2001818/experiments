@@ -57,6 +57,6 @@ struct Catalog {
 };
 
 Catalog deserialize_catalog(std::string_view json);
-std::string serialize_catalog(Catalog catalog);
+std::string serialize_catalog(const Catalog &catalog);
 
 } // namespace minidb

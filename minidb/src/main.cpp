@@ -1,8 +1,11 @@
 #include <cctype>
+#include <exception>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <string_view>
 
+#include "minidb/database.hpp"
 #include "minidb/ddl_parser.hpp"
 
 namespace {
@@ -93,20 +96,26 @@ bool run_dot_command(std::string_view command) {
   return true;
 }
 
-void parse_and_report(std::string_view sql) {
+void parse_and_report(minidb::Database& database, std::string_view sql) {
   try {
-    (void)minidb::parse_ddl_statement(sql);
-    std::cout << "parsed ddl statement\n";
+    const auto statement = minidb::parse_ddl_statement(sql);
+    std::cout << database.execute(statement) << '\n';
   } catch (const minidb::ParseError& error) {
     const auto location = error.location();
     std::cout << "parse error at " << location.line << ':'
               << location.column << ": " << error.what() << '\n';
+  } catch (const std::exception& error) {
+    std::cout << "error: " << error.what() << '\n';
   }
 }
 
 } // namespace
 
 int main() {
+  minidb::Database database = std::filesystem::exists("minidb.db")
+    ? minidb::Database::open("minidb.db")
+    : minidb::Database::create("minidb.db");
+
   std::cout << "MiniDB\n";
   std::cout << "Enter .help for help.\n";
 
@@ -135,13 +144,13 @@ int main() {
     buffer += '\n';
 
     if (ends_statement(buffer)) {
-      parse_and_report(buffer);
+      parse_and_report(database, buffer);
       buffer.clear();
     }
   }
 
   if (!trim(buffer).empty()) {
-    parse_and_report(buffer);
+    parse_and_report(database, buffer);
   }
 
   std::cout << '\n';

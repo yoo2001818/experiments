@@ -16,6 +16,7 @@ public:
   void append(std::span<std::byte const> data);
   std::uint64_t size();
   void flush();
+  void close();
 
 private:
   std::fstream file_;

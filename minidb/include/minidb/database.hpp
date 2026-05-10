@@ -7,6 +7,8 @@
 #include <filesystem>
 #include <optional>
 #include <span>
+#include <string>
+#include <variant>
 #include <unordered_map>
 #include <vector>
 
@@ -25,6 +27,11 @@ class Table {
 public:
   explicit Table(TableSchema schema, std::filesystem::path working_dir);
   ~Table();
+
+  Table(Table &&) noexcept;
+  Table &operator=(Table &&) noexcept = delete;
+  Table(const Table &) = delete;
+  Table &operator=(const Table &) = delete;
 
   void create();
   void open();
@@ -59,17 +66,23 @@ class Database {
 public:
   ~Database();
 
+  Database(Database &&) noexcept;
+  Database &operator=(Database &&) noexcept = delete;
+  Database(const Database &) = delete;
+  Database &operator=(const Database &) = delete;
+
   static Database create(std::filesystem::path path);
   static Database open(std::filesystem::path path);
 
-  void execute(DdlStatement const &stmt);
+  std::string execute(DdlStatement const &stmt);
 
-  void create_table(CreateTableStmt const &stmt);
-  void create_index(CreateIndexStmt const &stmt);
-  void drop_table(DropTableStmt const &stmt);
-  void drop_index(DropIndexStmt const &stmt);
+  std::string create_table(CreateTableStmt const &stmt);
+  std::string create_index(CreateIndexStmt const &stmt);
+  std::string drop_table(DropTableStmt const &stmt);
+  std::string drop_index(DropIndexStmt const &stmt);
 
   void flush();
+  const Catalog &catalog() const;
 
 private:
   Catalog catalog_;

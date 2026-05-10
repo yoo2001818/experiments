@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace minidb {
@@ -50,8 +51,12 @@ struct TableSchema {
 };
 
 struct Catalog {
+  std::uint32_t version;
   std::vector<TableSchema> tables;
   std::uint32_t next_table_storage_id;
 };
+
+Catalog deserialize_catalog(std::string_view json);
+std::string serialize_catalog(Catalog catalog);
 
 } // namespace minidb

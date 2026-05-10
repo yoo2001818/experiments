@@ -33,6 +33,7 @@ public:
 
   void insert(Row const &row);
   std::optional<Row> read(std::int64_t row_offset);
+  // iterator is intentionally omitted for now
   void delete_row(std::int64_t row_offset);
   std::int64_t size();
 

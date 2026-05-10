@@ -1,4 +1,4 @@
-#include "minidb/database.hpp"
+#include "minidb/table.hpp"
 #include "minidb/ddl_ast.hpp"
 #include "minidb/util_binary.hpp"
 

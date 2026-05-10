@@ -3,7 +3,9 @@
 #include "minidb/catalog.hpp"
 #include "minidb/storage.hpp"
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <string>
@@ -18,6 +20,52 @@ using Value =
 
 struct Row {
   std::vector<Value> values;
+};
+
+class Table;
+
+struct RowEntry {
+  std::int64_t row_offset;
+  Row row;
+};
+
+class TableRowIterator {
+public:
+  using difference_type = std::ptrdiff_t;
+  using iterator_category = std::input_iterator_tag;
+  using iterator_concept = std::input_iterator_tag;
+  using pointer = const RowEntry *;
+  using reference = const RowEntry &;
+  using value_type = RowEntry;
+
+  TableRowIterator() = default;
+  explicit TableRowIterator(Table &table);
+
+  reference operator*() const;
+  pointer operator->() const;
+  TableRowIterator &operator++();
+  void operator++(int);
+  bool operator==(std::default_sentinel_t) const;
+
+  std::optional<RowEntry> next();
+
+private:
+  Table *table_;
+  std::int64_t next_offset_ = 0;
+  std::optional<RowEntry> current_;
+
+  void advance_();
+};
+
+class TableRowScan {
+public:
+  explicit TableRowScan(Table &table);
+
+  TableRowIterator begin();
+  std::default_sentinel_t end() const;
+
+private:
+  Table *table_;
 };
 
 class Table {
@@ -37,7 +85,7 @@ public:
 
   void insert(Row const &row);
   std::optional<Row> read(std::int64_t row_offset);
-  // iterator is intentionally omitted for now
+  TableRowScan scan();
   void delete_row(std::int64_t row_offset);
   std::int64_t size();
 

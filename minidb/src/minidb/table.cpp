@@ -179,6 +179,8 @@ std::optional<Row> Table::read(std::int64_t row_offset) {
   return decode_row_(buffer);
 }
 
+TableRowScan Table::scan() { return TableRowScan(*this); }
+
 void Table::delete_row(std::int64_t row_offset) {
   if (row_offset < 0 || row_offset >= size()) {
     throw std::runtime_error("row offset out of range");
@@ -321,6 +323,66 @@ void Table::encode_row_(Row &row, std::span<std::byte> out) {
     }
     }
   }
+}
+
+TableRowIterator::TableRowIterator(Table &table) : table_(&table) {
+  advance_();
+}
+
+TableRowIterator::reference TableRowIterator::operator*() const {
+  return *current_;
+}
+
+TableRowIterator::pointer TableRowIterator::operator->() const {
+  return &*current_;
+}
+
+TableRowIterator &TableRowIterator::operator++() {
+  advance_();
+  return *this;
+}
+
+void TableRowIterator::operator++(int) { (void)++(*this); }
+
+bool TableRowIterator::operator==(std::default_sentinel_t) const {
+  return !current_.has_value();
+}
+
+std::optional<RowEntry> TableRowIterator::next() {
+  if (!current_.has_value())
+    return std::nullopt;
+
+  auto output = std::move(current_);
+  advance_();
+  return output;
+}
+
+void TableRowIterator::advance_() {
+  current_.reset();
+  if (table_ == nullptr)
+    return;
+
+  while (next_offset_ < table_->size()) {
+    const auto row_offset = next_offset_;
+    next_offset_ += 1;
+
+    auto row = table_->read(row_offset);
+    if (row.has_value()) {
+      current_ = RowEntry{
+          .row_offset = row_offset,
+          .row = std::move(*row),
+      };
+      return;
+    }
+  }
+}
+
+TableRowScan::TableRowScan(Table &table) : table_(&table) {}
+
+TableRowIterator TableRowScan::begin() { return TableRowIterator(*table_); }
+
+std::default_sentinel_t TableRowScan::end() const {
+  return std::default_sentinel;
 }
 
 } // namespace minidb

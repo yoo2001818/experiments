@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <vector>
 
 #include "minidb/database.hpp"
 #include "minidb/ddl_parser.hpp"
@@ -173,6 +174,100 @@ TEST_CASE("table row file validates header and stores fixed-width rows") {
 
   reopened.delete_row(0);
   REQUIRE_FALSE(reopened.read(0).has_value());
+}
+
+TEST_CASE("table scan iterates live rows and skips tombstones") {
+  TempDir dir;
+  const auto schema = users_schema();
+
+  minidb::Table table(schema, dir.path);
+  table.create();
+
+  auto empty_scan = table.scan().begin();
+  REQUIRE_FALSE(empty_scan.next().has_value());
+
+  table.insert(minidb::Row{
+    .values = {std::int64_t{1}, std::string{"Ada"}},
+  });
+  table.insert(minidb::Row{
+    .values = {std::int64_t{2}, nullptr},
+  });
+  table.insert(minidb::Row{
+    .values = {std::int64_t{3}, std::string{"Grace"}},
+  });
+  table.delete_row(1);
+
+  std::vector<minidb::RowEntry> entries;
+  for (const auto &entry : table.scan()) {
+    entries.push_back(entry);
+  }
+
+  REQUIRE(entries.size() == 2);
+
+  const auto& first = entries.at(0);
+  REQUIRE(first.row_offset == 0);
+  REQUIRE(std::get<std::int64_t>(first.row.values.at(0)) == 1);
+  REQUIRE(std::get<std::string>(first.row.values.at(1)) == "Ada");
+
+  const auto& second = entries.at(1);
+  REQUIRE(second.row_offset == 2);
+  REQUIRE(std::get<std::int64_t>(second.row.values.at(0)) == 3);
+  REQUIRE(std::get<std::string>(second.row.values.at(1)) == "Grace");
+
+  auto scan = table.scan().begin();
+  const auto next_first = scan.next();
+  REQUIRE(next_first.has_value());
+  REQUIRE(next_first->row_offset == 0);
+  const auto next_second = scan.next();
+  REQUIRE(next_second.has_value());
+  REQUIRE(next_second->row_offset == 2);
+  REQUIRE_FALSE(scan.next().has_value());
+  REQUIRE_FALSE(scan.next().has_value());
+}
+
+TEST_CASE("table scan iterator supports manual increment") {
+  TempDir dir;
+  const auto schema = users_schema();
+
+  minidb::Table table(schema, dir.path);
+  table.create();
+  table.insert(minidb::Row{
+    .values = {std::int64_t{1}, std::string{"Ada"}},
+  });
+  table.insert(minidb::Row{
+    .values = {std::int64_t{2}, std::string{"Grace"}},
+  });
+
+  auto scan = table.scan();
+  auto it = scan.begin();
+  REQUIRE(it != scan.end());
+  REQUIRE(it->row_offset == 0);
+
+  ++it;
+  REQUIRE(it != scan.end());
+  REQUIRE((*it).row_offset == 1);
+
+  it++;
+  REQUIRE(it == scan.end());
+}
+
+TEST_CASE("table scan next helper remains available") {
+  TempDir dir;
+  const auto schema = users_schema();
+
+  minidb::Table table(schema, dir.path);
+  table.create();
+  table.insert(minidb::Row{
+    .values = {std::int64_t{1}, std::string{"Ada"}},
+  });
+
+  auto scan = table.scan().begin();
+  const auto first = scan.next();
+  REQUIRE(first.has_value());
+  REQUIRE(first->row_offset == 0);
+  REQUIRE(std::get<std::int64_t>(first->row.values.at(0)) == 1);
+  REQUIRE(std::get<std::string>(first->row.values.at(1)) == "Ada");
+  REQUIRE_FALSE(scan.next().has_value());
 }
 
 TEST_CASE("table row file rejects invalid header") {

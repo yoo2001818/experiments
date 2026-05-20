@@ -214,11 +214,16 @@ but may be used as `quoted_identifier`.
 ## SELECT
 
 ```
-SELECT [DISTINCT] select_expr [, select_expr] ...
-[FROM table_references]
+SELECT [DISTINCT] select_item [, select_item] ...
+[FROM table_reference [, table_reference] ...]
 [WHERE where_condition]
 [ORDER BY {col_name | expr | position} [ASC | DESC], ...]
 [LIMIT {[offset,] row_count | row_count OFFSET offset}];
+
+select_item:
+  * | identifier.* | expr [[AS] alias]
+table_reference:
+  table_name [[AS] alias]
 ```
 
 ## INSERT

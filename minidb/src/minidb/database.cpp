@@ -1,5 +1,4 @@
 #include "minidb/database.hpp"
-#include "minidb/ddl_ast.hpp"
 
 #include <algorithm>
 #include <array>
@@ -206,6 +205,11 @@ void ensure_unique_index_name(const TableSchema &table,
   }
 }
 
+std::string dml_statement_name(const SelectStmt &) { return "SELECT"; }
+std::string dml_statement_name(const InsertStmt &) { return "INSERT"; }
+std::string dml_statement_name(const UpdateStmt &) { return "UPDATE"; }
+std::string dml_statement_name(const DeleteStmt &) { return "DELETE"; }
+
 } // namespace
 
 Database::Database() = default;
@@ -255,6 +259,23 @@ std::string Database::execute(const DdlStatement &stmt) {
           return drop_table(statement);
         } else if constexpr (std::is_same_v<Statement, DropIndexStmt>) {
           return drop_index(statement);
+        }
+      },
+      stmt);
+}
+
+std::string Database::execute(const Statement &stmt) {
+  return std::visit(
+      [&](const auto &statement) -> std::string {
+        using StatementType = std::decay_t<decltype(statement)>;
+        if constexpr (std::is_same_v<StatementType, CreateTableStmt> ||
+                      std::is_same_v<StatementType, CreateIndexStmt> ||
+                      std::is_same_v<StatementType, DropTableStmt> ||
+                      std::is_same_v<StatementType, DropIndexStmt>) {
+          return execute(DdlStatement{statement});
+        } else {
+          return "DML execution is not implemented yet: " +
+                 dml_statement_name(statement);
         }
       },
       stmt);

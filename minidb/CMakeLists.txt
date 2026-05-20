@@ -35,6 +35,7 @@ if(BUILD_TESTING)
     tests/database_test.cpp
     tests/ddl_ast_test.cpp
     tests/ddl_parser_test.cpp
+    tests/dml_parser_test.cpp
     tests/greeting_test.cpp
   )
   target_link_libraries(minidb_tests PRIVATE minidb_core Catch2::Catch2WithMain)

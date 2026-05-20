@@ -6,7 +6,7 @@
 #include <string_view>
 
 #include "minidb/database.hpp"
-#include "minidb/ddl_parser.hpp"
+#include "minidb/parser.hpp"
 
 namespace {
 
@@ -88,7 +88,7 @@ bool run_dot_command(std::string_view command) {
       << "  .quit   Exit the REPL\n"
       << "  .exit   Exit the REPL\n"
       << "\n"
-      << "Enter DDL statements terminated by ';'.\n";
+      << "Enter SQL statements terminated by ';'.\n";
     return true;
   }
 
@@ -98,7 +98,7 @@ bool run_dot_command(std::string_view command) {
 
 void parse_and_report(minidb::Database& database, std::string_view sql) {
   try {
-    const auto statement = minidb::parse_ddl_statement(sql);
+    const auto statement = minidb::parse_statement(sql);
     std::cout << database.execute(statement) << '\n';
   } catch (const minidb::ParseError& error) {
     const auto location = error.location();

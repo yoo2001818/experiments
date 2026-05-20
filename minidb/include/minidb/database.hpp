@@ -1,7 +1,7 @@
 #pragma once
 
+#include "minidb/ast.hpp"
 #include "minidb/catalog.hpp"
-#include "minidb/ddl_ast.hpp"
 #include "minidb/table.hpp"
 #include <filesystem>
 #include <string>
@@ -21,6 +21,7 @@ public:
   static Database create(std::filesystem::path path);
   static Database open(std::filesystem::path path);
 
+  std::string execute(Statement const &stmt);
   std::string execute(DdlStatement const &stmt);
 
   std::string create_table(CreateTableStmt const &stmt);

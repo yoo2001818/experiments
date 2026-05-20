@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "minidb/database.hpp"
-#include "minidb/ddl_parser.hpp"
+#include "minidb/parser.hpp"
 
 namespace {
 
@@ -151,6 +151,16 @@ TEST_CASE("database stores index metadata without index file") {
   REQUIRE(database.execute(parse("DROP INDEX users_name_idx ON users;")) ==
     "index dropped: users_name_idx");
   REQUIRE(database.catalog().tables.at(0).indexes.empty());
+}
+
+TEST_CASE("database executes unified statements and reports unsupported DML") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER);")) == "table created: users");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "SELECT * FROM users;")) == "DML execution is not implemented yet: SELECT");
 }
 
 TEST_CASE("table row file validates header and stores fixed-width rows") {

@@ -1,5 +1,5 @@
 #include "minidb/table.hpp"
-#include "minidb/ddl_ast.hpp"
+#include "minidb/ast.hpp"
 #include "minidb/util_binary.hpp"
 
 #include <algorithm>

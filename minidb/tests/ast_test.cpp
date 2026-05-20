@@ -2,7 +2,7 @@
 
 #include <variant>
 
-#include "minidb/ddl_ast.hpp"
+#include "minidb/ast.hpp"
 
 TEST_CASE("DDL AST represents CREATE TABLE definitions") {
   minidb::CreateTableStmt stmt{

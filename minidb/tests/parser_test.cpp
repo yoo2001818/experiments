@@ -2,8 +2,8 @@
 
 #include <variant>
 
-#include "minidb/ddl_ast.hpp"
-#include "minidb/ddl_parser.hpp"
+#include "minidb/ast.hpp"
+#include "minidb/parser.hpp"
 
 namespace {
 

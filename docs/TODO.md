@@ -1,0 +1,23 @@
+# TODO
+
+- [x] DDL parser
+- [x] Table catalog manager
+- [x] REPL
+- [x] DDL implementation
+- [ ] `.tables`, `.schema` commands
+- [x] Minimal row storage
+- [x] DML parser
+- [x] DML AST
+- [ ] Static INSERT query
+- [ ] SELECT \* query with row scanner
+- [ ] Pretty row scanner output
+- [ ] SQL expression column name binder
+- [ ] SQL expression evaluator
+- [ ] SELECT query (just expressions)
+- [ ] SELECT FROM query
+- [ ] SELECT FROM WHERE query
+- [ ] UPDATE, DELETE query
+- [ ] SELECT FROM WHERE ORDER BY query
+- [ ] SELECT FROM WHERE ORDER BY query, FROM allowing multiple tables
+- [ ] SELECT FROM JOIN WHERE ORDER BY query
+- [ ] INSERT INTO SELECT query

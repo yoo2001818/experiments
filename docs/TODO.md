@@ -8,8 +8,8 @@
 - [x] Minimal row storage
 - [x] DML parser
 - [x] DML AST
-- [ ] Static INSERT query
-- [ ] SELECT \* query with row scanner
+- [x] Static INSERT query
+- [x] SELECT \* query with row scanner
 - [ ] Pretty row scanner output
 - [ ] SQL expression column name binder
 - [ ] SQL expression evaluator

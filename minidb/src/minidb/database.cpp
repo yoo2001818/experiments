@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -12,8 +13,12 @@
 #include <stdexcept>
 #include <string>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 #include <variant>
+#include <vector>
+
+#include "minidb/iterator.hpp"
 
 namespace minidb {
 namespace {
@@ -210,6 +215,106 @@ std::string dml_statement_name(const InsertStmt &) { return "INSERT"; }
 std::string dml_statement_name(const UpdateStmt &) { return "UPDATE"; }
 std::string dml_statement_name(const DeleteStmt &) { return "DELETE"; }
 
+std::string unsupported_dml(const std::string &message) {
+  return "unsupported DML: " + message;
+}
+
+std::string require_single_part_name(const Identifier &identifier,
+                                     const std::string &kind) {
+  if (identifier.parts.size() != 1) {
+    throw std::runtime_error(kind + " must be a single-part identifier");
+  }
+  return identifier.parts.front();
+}
+
+const TableSchema &require_table_schema(const Catalog &catalog,
+                                        const std::string &table_name) {
+  const auto table_it = find_table(catalog.tables, table_name);
+  if (table_it == catalog.tables.end()) {
+    throw std::runtime_error("unknown table: " + table_name);
+  }
+  return *table_it;
+}
+
+std::size_t require_column_index(const TableSchema &table,
+                                 const std::string &column_name) {
+  for (std::size_t i = 0; i < table.columns.size(); i += 1) {
+    if (table.columns[i].name == column_name) {
+      return i;
+    }
+  }
+  throw std::runtime_error("unknown column: " + column_name);
+}
+
+std::int64_t parse_i64_literal(const std::string &text) {
+  std::int64_t value = 0;
+  const auto *begin = text.data();
+  const auto *end = text.data() + text.size();
+  const auto [ptr, error] = std::from_chars(begin, end, value);
+  if (error != std::errc{} || ptr != end) {
+    throw std::runtime_error("unsupported numeric literal for INSERT: " + text);
+  }
+  return value;
+}
+
+Value literal_insert_value(const LiteralValue &literal) {
+  if (std::holds_alternative<NullLiteral>(literal)) {
+    return nullptr;
+  }
+  if (const auto *number = std::get_if<NumericLiteral>(&literal)) {
+    return parse_i64_literal(number->text);
+  }
+  if (const auto *text = std::get_if<StringLiteral>(&literal)) {
+    return text->value;
+  }
+  if (const auto *boolean = std::get_if<BooleanLiteral>(&literal)) {
+    return boolean->value;
+  }
+  throw std::runtime_error("unsupported literal for INSERT");
+}
+
+Value insert_value_to_value(const InsertValue &insert_value) {
+  if (std::holds_alternative<DefaultValue>(insert_value)) {
+    return nullptr;
+  }
+
+  const auto &expr = *std::get<ExprPtr>(insert_value);
+  const auto *literal = std::get_if<LiteralExpr>(&expr.node);
+  if (literal == nullptr) {
+    throw std::runtime_error("INSERT VALUES supports literal values only");
+  }
+  return literal_insert_value(literal->value);
+}
+
+std::string render_binary(const BinaryValue &bytes) {
+  std::ostringstream out;
+  out << "0x";
+  for (const auto byte : bytes) {
+    out << std::hex << std::setw(2) << std::setfill('0')
+        << static_cast<int>(byte);
+  }
+  return out.str();
+}
+
+std::string render_value(const Value &value) {
+  if (std::holds_alternative<std::nullptr_t>(value)) {
+    return "NULL";
+  }
+  if (const auto *integer = std::get_if<std::int64_t>(&value)) {
+    return std::to_string(*integer);
+  }
+  if (const auto *boolean = std::get_if<bool>(&value)) {
+    return *boolean ? "TRUE" : "FALSE";
+  }
+  if (const auto *text = std::get_if<std::string>(&value)) {
+    return *text;
+  }
+  if (const auto *bytes = std::get_if<BinaryValue>(&value)) {
+    return render_binary(*bytes);
+  }
+  throw std::runtime_error("unknown value type");
+}
+
 } // namespace
 
 Database::Database() = default;
@@ -273,6 +378,10 @@ std::string Database::execute(const Statement &stmt) {
                       std::is_same_v<StatementType, DropTableStmt> ||
                       std::is_same_v<StatementType, DropIndexStmt>) {
           return execute(DdlStatement{statement});
+        } else if constexpr (std::is_same_v<StatementType, SelectStmt>) {
+          return execute(statement);
+        } else if constexpr (std::is_same_v<StatementType, InsertStmt>) {
+          return execute(statement);
         } else {
           return "DML execution is not implemented yet: " +
                  dml_statement_name(statement);
@@ -406,6 +515,110 @@ std::string Database::drop_index(const DropIndexStmt &stmt) {
   tables_.emplace(table_it->name, std::move(table));
   flush_catalog_();
   return "index dropped: " + stmt.index_name;
+}
+
+std::string Database::execute(const InsertStmt &stmt) {
+  const auto *values_source = std::get_if<InsertValuesSource>(&stmt.source);
+  if (values_source == nullptr) {
+    return unsupported_dml("only INSERT ... VALUES is implemented");
+  }
+
+  const auto table_name = require_single_part_name(stmt.table_name, "table");
+  const auto &schema = require_table_schema(catalog_, table_name);
+  auto table_it = tables_.find(table_name);
+  if (table_it == tables_.end()) {
+    throw std::runtime_error("table is not open: " + table_name);
+  }
+
+  std::vector<std::size_t> target_indexes;
+  if (stmt.column_names.empty()) {
+    target_indexes.reserve(schema.columns.size());
+    for (std::size_t i = 0; i < schema.columns.size(); i += 1) {
+      target_indexes.push_back(i);
+    }
+  } else {
+    std::unordered_set<std::string> seen_columns;
+    target_indexes.reserve(stmt.column_names.size());
+    for (const auto &column_identifier : stmt.column_names) {
+      const auto column_name =
+          require_single_part_name(column_identifier, "column");
+      if (!seen_columns.insert(column_name).second) {
+        throw std::runtime_error("duplicate INSERT column: " + column_name);
+      }
+      target_indexes.push_back(require_column_index(schema, column_name));
+    }
+  }
+
+  for (const auto &value_row : values_source->rows) {
+    if (value_row.size() != target_indexes.size()) {
+      throw std::runtime_error("INSERT value count does not match target columns");
+    }
+
+    Row row;
+    row.values.assign(schema.columns.size(), nullptr);
+    for (std::size_t i = 0; i < value_row.size(); i += 1) {
+      row.values[target_indexes[i]] = insert_value_to_value(value_row[i]);
+    }
+    table_it->second.insert(row);
+  }
+  table_it->second.flush();
+
+  return "rows inserted: " + std::to_string(values_source->rows.size());
+}
+
+std::string Database::execute(const SelectStmt &stmt) {
+  if (stmt.distinct) {
+    return unsupported_dml("SELECT DISTINCT is not implemented");
+  }
+  if (stmt.select_list.size() != 1) {
+    return unsupported_dml("only SELECT * is implemented");
+  }
+  const auto *wildcard =
+      std::get_if<WildcardSelectItem>(&stmt.select_list.front());
+  if (wildcard == nullptr) {
+    return unsupported_dml("only SELECT * is implemented");
+  }
+  if (wildcard->qualifier.has_value()) {
+    return unsupported_dml("only unqualified SELECT * is implemented");
+  }
+  if (stmt.from.size() != 1) {
+    return unsupported_dml("SELECT requires exactly one table");
+  }
+  if (stmt.where.has_value() || !stmt.order_by.empty() ||
+      stmt.limit.has_value()) {
+    return unsupported_dml("WHERE, ORDER BY, and LIMIT are not implemented");
+  }
+
+  const auto table_name =
+      require_single_part_name(stmt.from.front().table_name, "table");
+  const auto &schema = require_table_schema(catalog_, table_name);
+  auto table_it = tables_.find(table_name);
+  if (table_it == tables_.end()) {
+    throw std::runtime_error("table is not open: " + table_name);
+  }
+
+  std::ostringstream out;
+  for (std::size_t i = 0; i < schema.columns.size(); i += 1) {
+    if (i != 0) {
+      out << '\t';
+    }
+    out << schema.columns[i].name;
+  }
+
+  TableScanIterator scan(table_it->second);
+  scan.open();
+  while (auto entry = scan.next()) {
+    out << '\n';
+    for (std::size_t i = 0; i < entry->row.values.size(); i += 1) {
+      if (i != 0) {
+        out << '\t';
+      }
+      out << render_value(entry->row.values[i]);
+    }
+  }
+  scan.close();
+
+  return out.str();
 }
 
 void Database::flush() {

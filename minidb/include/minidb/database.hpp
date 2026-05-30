@@ -39,6 +39,8 @@ private:
 
   explicit Database();
 
+  std::string execute(SelectStmt const &stmt);
+  std::string execute(InsertStmt const &stmt);
   void flush_catalog_();
 };
 

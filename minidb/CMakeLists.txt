@@ -16,6 +16,7 @@ add_library(minidb_core
   src/minidb/database.cpp
   src/minidb/parser.cpp
   src/minidb/greeting.cpp
+  src/minidb/iterator.cpp
   src/minidb/storage.cpp
   src/minidb/table.cpp
   src/minidb/util_binary.cpp

@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -160,7 +162,148 @@ TEST_CASE("database executes unified statements and reports unsupported DML") {
   REQUIRE(database.execute(minidb::parse_statement(
     "CREATE TABLE users (id INTEGER);")) == "table created: users");
   REQUIRE(database.execute(minidb::parse_statement(
-    "SELECT * FROM users;")) == "DML execution is not implemented yet: SELECT");
+    "SELECT * FROM users;")) == "id");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "UPDATE users SET id = 1;")) ==
+    "DML execution is not implemented yet: UPDATE");
+}
+
+TEST_CASE("database inserts values and selects rows as TSV") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16), active BOOLEAN);")) ==
+    "table created: users");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "INSERT INTO users VALUES (1, 'Ada', TRUE);")) ==
+    "rows inserted: 1");
+
+  REQUIRE(database.execute(minidb::parse_statement("SELECT * FROM users;")) ==
+    "id\tname\tactive\n1\tAda\tTRUE");
+}
+
+TEST_CASE("database inserts multiple rows with null and default values") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16), active BOOLEAN);")) ==
+    "table created: users");
+  REQUIRE(database.execute(minidb::parse_statement(R"sql(
+    INSERT INTO users VALUES
+      (1, 'Ada', TRUE),
+      (2, NULL, FALSE),
+      (3, DEFAULT, TRUE);
+  )sql")) == "rows inserted: 3");
+
+  REQUIRE(database.execute(minidb::parse_statement("SELECT * FROM users;")) ==
+    "id\tname\tactive\n1\tAda\tTRUE\n2\tNULL\tFALSE\n3\tNULL\tTRUE");
+}
+
+TEST_CASE("database inserts values using explicit column order") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16), active BOOLEAN);")) ==
+    "table created: users");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "INSERT INTO users (active, name, id) VALUES (FALSE, 'Grace', 7);")) ==
+    "rows inserted: 1");
+
+  REQUIRE(database.execute(minidb::parse_statement("SELECT * FROM users;")) ==
+    "id\tname\tactive\n7\tGrace\tFALSE");
+}
+
+TEST_CASE("database persists inserted rows across reopen") {
+  TempDir dir;
+  {
+    auto database = minidb::Database::create(dir.path);
+    REQUIRE(database.execute(minidb::parse_statement(
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16));")) ==
+      "table created: users");
+    REQUIRE(database.execute(minidb::parse_statement(
+      "INSERT INTO users VALUES (1, 'Ada'), (2, 'Grace');")) ==
+      "rows inserted: 2");
+  }
+
+  auto reopened = minidb::Database::open(dir.path);
+  REQUIRE(reopened.execute(minidb::parse_statement("SELECT * FROM users;")) ==
+    "id\tname\n1\tAda\n2\tGrace");
+}
+
+TEST_CASE("database SELECT star skips tombstoned rows through table scan") {
+  TempDir dir;
+  minidb::TableSchema schema;
+  {
+    auto database = minidb::Database::create(dir.path);
+    REQUIRE(database.execute(minidb::parse_statement(
+      "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16));")) ==
+      "table created: users");
+    REQUIRE(database.execute(minidb::parse_statement(
+      "INSERT INTO users VALUES (1, 'Ada'), (2, 'Linus'), (3, 'Grace');")) ==
+      "rows inserted: 3");
+    schema = database.catalog().tables.at(0);
+  }
+
+  minidb::Table table(schema, dir.path);
+  table.open();
+  table.delete_row(1);
+  table.flush();
+
+  auto reopened = minidb::Database::open(dir.path);
+  REQUIRE(reopened.execute(minidb::parse_statement("SELECT * FROM users;")) ==
+    "id\tname\n1\tAda\n3\tGrace");
+}
+
+TEST_CASE("database rejects invalid INSERT VALUES execution") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16));")) ==
+    "table created: users");
+
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "INSERT INTO users VALUES (1);")), std::runtime_error);
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "INSERT INTO missing VALUES (1, 'Ada');")), std::runtime_error);
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "INSERT INTO users (missing) VALUES (1);")), std::runtime_error);
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "INSERT INTO users (id, id) VALUES (1, 2);")), std::runtime_error);
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "INSERT INTO users VALUES (1 + 2, 'Ada');")), std::runtime_error);
+}
+
+TEST_CASE("database reports unsupported DML shapes") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER PRIMARY KEY, name CHAR(16));")) ==
+    "table created: users");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "CREATE TABLE accounts (id INTEGER);")) ==
+    "table created: accounts");
+
+  REQUIRE(database.execute(minidb::parse_statement(
+    "INSERT users SET id = 1, name = 'Ada';")) ==
+    "unsupported DML: only INSERT ... VALUES is implemented");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "INSERT INTO users SELECT * FROM accounts;")) ==
+    "unsupported DML: only INSERT ... VALUES is implemented");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "INSERT INTO users TABLE accounts;")) ==
+    "unsupported DML: only INSERT ... VALUES is implemented");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "SELECT id FROM users;")) ==
+    "unsupported DML: only SELECT * is implemented");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "SELECT * FROM users WHERE id = 1;")) ==
+    "unsupported DML: WHERE, ORDER BY, and LIMIT are not implemented");
+  REQUIRE(database.execute(minidb::parse_statement(
+    "SELECT * FROM users, accounts;")) ==
+    "unsupported DML: SELECT requires exactly one table");
 }
 
 TEST_CASE("table row file validates header and stores fixed-width rows") {

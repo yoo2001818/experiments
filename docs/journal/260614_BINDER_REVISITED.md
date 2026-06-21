@@ -53,3 +53,80 @@ With this, the examples in the former document would be useful.
   ],
 }
 ```
+
+Now with this, let's formalize the architecture.
+
+## Scope
+
+First of all, the scope has to be recursive, and may have to interact with
+the intermediate frame directly - take "ORDER BY some_entirely_new_column" for
+example. It depends on the `select_refs`, and if `select_refs` doesn't have it,
+it needs to gather it from `from_refs`, which prompts `from_refs` to be modified
+as well.
+
+With that in mind... it may be desirable that the scope itself manages the
+intermediate frame data, hence it's equivalent to the phase.
+
+```cpp
+struct RefSlot {
+  std::uint32_t index;
+}
+
+struct RefFromDependency {
+  std::string canonical_name;
+  ColumnRef col_ref;
+}
+
+struct RefSelectDependency {
+  std::string canonical_name;
+  Expr expr;
+  bool is_hidden;
+}
+
+class Scope {
+  virtual RefSlot resolve(Identifier const& identifier);
+}
+
+class FromScope : public Scope {
+  std::vector<RefFromDependency> frame;
+  virtual RefSlot resolve(Identifier const& identifier) {
+    // Since FromScope doesn't have a parent, but instead has access to every
+    // table and columns specified in FROM, it can just use that.
+    // Create/retrieve the RefSlot and return them
+  }
+}
+
+class SelectScope : public Scope {
+  Scope * parent;
+  std::vector<RefSelectDependency> frame;
+  void append(Expr const& expr, Identifier const& alias) {
+    // Appends SELECT (expr) a, (expr) b, ... into the intermediate frame
+  }
+  virtual RefSlot resolve(Identifier const& identifier) {
+    // If the ref is already resolved in the frame, just use it
+    // otherwise, resolve from the parent and append it to the frame
+    auto parent_ref = parent->resolve(identifier);
+    this->frame.push({ canonical_name, parent_ref, true });
+  }
+}
+```
+
+Then, the frame itself is coupled to the parent layout - as it would directly
+use RefSlot numbers from the previous step. A separate resolver, or frankly the
+Scope itself, could run the expression from the frames.
+
+## AST Replacement
+
+The idea remains a simple AST walker - but now with a scope, and AST itself
+changed to being able to accompany "BoundExpr".
+
+```cpp
+struct BoundExpr {
+  RefSlot ref;
+};
+```
+
+## Conclusion
+
+Okay this has been going on for too long, but at this point I have some idea
+about how to implement the binder. So... time to wrap this up.

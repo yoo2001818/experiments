@@ -80,7 +80,7 @@ struct RefJoinDependency {
   ColumnRef col_ref;
 }
 
-struct RefSelectDependency {
+struct RefProjectDependency {
   std::string canonical_name;
   Expr expr;
   bool is_hidden;
@@ -110,7 +110,7 @@ class JoinLogicalOp : public LogicalOp {
 
 class ProjectLogicalOp : public LogicalOp {
   Scope * parent;
-  std::vector<RefSelectDependency> frame;
+  std::vector<RefProjectDependency> frame;
   void append(Expr const& expr, Identifier const& alias) {
     // Appends SELECT (expr) a, (expr) b, ... into the intermediate frame
   }
@@ -128,3 +128,24 @@ class ProjectLogicalOp : public LogicalOp {
 Well, the structure inevitably leads to implementing physical plans as well.
 I think it's quite plausible that `LogicalOp` could emit `PhysicalOp` directly,
 so that a simple implementation could be done right in front of it.
+
+## What about the evaluator?
+
+... Well, I've been discussing logical/physical operators, definitely not
+evaluators. But once the structure has been laid out, the evaluator just needs
+to walk the AST, read the data row, return new output. Something like:
+
+```cpp
+struct NullValue {};
+
+struct IntegerValue {
+  std::int64_t value;
+};
+
+using Value = std::variant<IntegerValue, NullValue>;
+using DataRow = std::vector<Value>;
+
+Value ast_evaluate(Expression expr, DataRow& input);
+```
+
+Where each DataRow would be pre-filled by looping through `RefScanDependency`, etc.

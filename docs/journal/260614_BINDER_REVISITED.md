@@ -118,10 +118,10 @@ Scope itself, could run the expression from the frames.
 ## AST Replacement
 
 The idea remains a simple AST walker - but now with a scope, and AST itself
-changed to being able to accompany "BoundExpr".
+changed to being able to accompany "BoundRefExpr".
 
 ```cpp
-struct BoundExpr {
+struct BoundRefExpr {
   RefSlot ref;
 };
 ```

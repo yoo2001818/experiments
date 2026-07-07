@@ -34,11 +34,24 @@ Then, the evaluator should be able to read from the `BoundRefExpr` and the
 input array, as seen from the `ast_evaluate` function in the evaluator document.
 
 This is of course no means usable at this point, but unit tests are possible,
-so let's use that.
+so let's use that to validate it.
 
 ## BoundRefExpr rewrites
+
+Now it's time to rewrite function calls and identifiers from the input AST,
+which would have arbitrary identifiers. A simple function like this,
+would be enough.
+
+```ts
+function ast_walk(expr: Expr, callback: (expr: Expr) => Expr): Expr;
+```
 
 ## Logical plans
 
 Then the logical plans. The actual binder architecture is not important at this
 point - just the fact that the query can be expressed in a certain way.
+
+Well, it would be expressed as a chain of logical operators - like Matryoshka
+dolls. Just the generic shape, like "scan -> filter -> project -> sort".
+
+## Scope resolving

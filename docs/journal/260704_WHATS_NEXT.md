@@ -55,3 +55,12 @@ Well, it would be expressed as a chain of logical operators - like Matryoshka
 dolls. Just the generic shape, like "scan -> filter -> project -> sort".
 
 ## Scope resolving
+
+Then the scope resolver can be implemented on top of the logical plans.
+The logical operators should already have all the scope information to resolve
+identifiers, while dynamically changing its layout as it sees new values.
+
+## Physical plans
+
+A simple physical operator suite that maps directly to the logical plan can
+readily be implemented to test the database.

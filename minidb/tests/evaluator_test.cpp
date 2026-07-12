@@ -20,6 +20,12 @@ minidb::Value evaluate(const std::string &expression) {
       parse_select_expression("SELECT " + expression + ";"));
 }
 
+minidb::ExprPtr bound_ref(std::uint32_t index) {
+  return std::make_shared<minidb::Expr>(minidb::Expr{
+      .node = minidb::BoundRefExpr{.ref = minidb::RefSlot{.index = index}},
+  });
+}
+
 } // namespace
 
 TEST_CASE("evaluate literal arithmetic recursively") {
@@ -45,6 +51,34 @@ TEST_CASE("evaluate nulls and unresolved identifiers as null") {
       std::holds_alternative<minidb::NullValue>(evaluate("missing_column")));
   REQUIRE(std::holds_alternative<minidb::NullValue>(
       evaluate("missing_column + 1")));
+}
+
+TEST_CASE("evaluate bound references from an input row") {
+  const minidb::Expr expression{
+      .node =
+          minidb::BinaryExpr{
+              .left = bound_ref(0),
+              .op = minidb::BinaryOperator::Add,
+              .right = bound_ref(1),
+          },
+  };
+  const minidb::DataRow input{
+      minidb::IntegerValue{.value = 20},
+      minidb::IntegerValue{.value = 22},
+  };
+
+  const auto result = minidb::ast_evaluate(expression, input);
+  REQUIRE(std::get<minidb::IntegerValue>(result).value == 42);
+}
+
+TEST_CASE("bound references preserve nulls and validate their slots") {
+  const minidb::DataRow input{minidb::NullValue{}};
+  REQUIRE(std::holds_alternative<minidb::NullValue>(
+      minidb::ast_evaluate(bound_ref(0), input)));
+  REQUIRE_THROWS_AS(minidb::ast_evaluate(bound_ref(1), input),
+                    minidb::EvaluationError);
+  REQUIRE_THROWS_AS(minidb::ast_evaluate(bound_ref(0)),
+                    minidb::EvaluationError);
 }
 
 TEST_CASE("reject invalid or unsupported evaluations") {

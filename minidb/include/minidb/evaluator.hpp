@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace minidb {
 
@@ -13,7 +14,11 @@ public:
   explicit EvaluationError(std::string message);
 };
 
+using DataRow = std::vector<Value>;
+
 Value ast_evaluate(const Expr &expr);
 Value ast_evaluate(const ExprPtr &expr);
+Value ast_evaluate(const Expr &expr, const DataRow &input);
+Value ast_evaluate(const ExprPtr &expr, const DataRow &input);
 
 } // namespace minidb

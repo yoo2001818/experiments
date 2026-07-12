@@ -12,6 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(minidb_core
+  src/minidb/ast_rewrite.cpp
   src/minidb/catalog.cpp
   src/minidb/database.cpp
   src/minidb/evaluator.cpp
@@ -33,6 +34,7 @@ if(BUILD_TESTING)
   find_package(Catch2 3 REQUIRED)
 
   add_executable(minidb_tests
+    tests/ast_rewrite_test.cpp
     tests/catalog_test.cpp
     tests/database_test.cpp
     tests/ast_test.cpp

@@ -69,8 +69,8 @@ Value evaluate_literal(const LiteralExpr &expr) {
       expr.value);
 }
 
-Value evaluate_unary(const UnaryExpr &expr) {
-  const Value operand = ast_evaluate(expr.operand);
+Value evaluate_unary(const UnaryExpr &expr, const DataRow &input) {
+  const Value operand = ast_evaluate(expr.operand, input);
   if (is_null(operand)) {
     return NullValue{};
   }
@@ -179,9 +179,9 @@ std::int64_t checked_multiply(std::int64_t left, std::int64_t right) {
   return left * right;
 }
 
-Value evaluate_binary(const BinaryExpr &expr) {
-  const Value left = ast_evaluate(expr.left);
-  const Value right = ast_evaluate(expr.right);
+Value evaluate_binary(const BinaryExpr &expr, const DataRow &input) {
+  const Value left = ast_evaluate(expr.left, input);
+  const Value right = ast_evaluate(expr.right, input);
 
   if (expr.op == BinaryOperator::And) {
     return evaluate_and(left, right);
@@ -277,18 +277,30 @@ Value evaluate_binary(const BinaryExpr &expr) {
 EvaluationError::EvaluationError(std::string message)
     : std::runtime_error(std::move(message)) {}
 
-Value ast_evaluate(const Expr &expr) {
+Value ast_evaluate(const Expr &expr) { return ast_evaluate(expr, DataRow{}); }
+
+Value ast_evaluate(const ExprPtr &expr) {
+  return ast_evaluate(expr, DataRow{});
+}
+
+Value ast_evaluate(const Expr &expr, const DataRow &input) {
   return std::visit(
-      [](const auto &node) -> Value {
+      [&input](const auto &node) -> Value {
         using T = std::decay_t<decltype(node)>;
         if constexpr (std::is_same_v<T, LiteralExpr>) {
           return evaluate_literal(node);
         } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
           return NullValue{};
+        } else if constexpr (std::is_same_v<T, BoundRefExpr>) {
+          if (node.ref.index >= input.size()) {
+            throw EvaluationError("bound reference slot is out of range: " +
+                                  std::to_string(node.ref.index));
+          }
+          return input[node.ref.index];
         } else if constexpr (std::is_same_v<T, UnaryExpr>) {
-          return evaluate_unary(node);
+          return evaluate_unary(node, input);
         } else if constexpr (std::is_same_v<T, BinaryExpr>) {
-          return evaluate_binary(node);
+          return evaluate_binary(node, input);
         } else {
           throw EvaluationError(
               "expression node is not supported by the evaluator");
@@ -297,11 +309,11 @@ Value ast_evaluate(const Expr &expr) {
       expr.node);
 }
 
-Value ast_evaluate(const ExprPtr &expr) {
+Value ast_evaluate(const ExprPtr &expr, const DataRow &input) {
   if (expr == nullptr) {
     throw EvaluationError("cannot evaluate a null expression pointer");
   }
-  return ast_evaluate(*expr);
+  return ast_evaluate(*expr, input);
 }
 
 } // namespace minidb

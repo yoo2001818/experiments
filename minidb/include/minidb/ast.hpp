@@ -146,6 +146,14 @@ struct IdentifierExpr {
   Identifier name;
 };
 
+struct RefSlot {
+  std::uint32_t index;
+};
+
+struct BoundRefExpr {
+  RefSlot ref;
+};
+
 struct UnaryExpr {
   UnaryOperator op;
   ExprPtr operand;
@@ -199,10 +207,9 @@ struct CaseExpr {
 };
 
 struct Expr {
-  using Node =
-      std::variant<LiteralExpr, IdentifierExpr, UnaryExpr, BinaryExpr,
-                   FunctionCallExpr, IsExpr, BetweenExpr, InExpr, LikeExpr,
-                   CaseExpr>;
+  using Node = std::variant<LiteralExpr, IdentifierExpr, BoundRefExpr,
+                            UnaryExpr, BinaryExpr, FunctionCallExpr, IsExpr,
+                            BetweenExpr, InExpr, LikeExpr, CaseExpr>;
 
   Node node;
 };

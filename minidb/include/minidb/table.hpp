@@ -2,6 +2,7 @@
 
 #include "minidb/catalog.hpp"
 #include "minidb/storage.hpp"
+#include "minidb/value.hpp"
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -9,15 +10,9 @@
 #include <optional>
 #include <span>
 #include <string>
-#include <variant>
 #include <vector>
 
 namespace minidb {
-using BinaryValue = std::vector<std::uint8_t>;
-
-using Value =
-    std::variant<std::nullptr_t, std::int64_t, bool, std::string, BinaryValue>;
-
 struct Row {
   std::vector<Value> values;
 };

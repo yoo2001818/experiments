@@ -168,6 +168,15 @@ TEST_CASE("database executes unified statements and reports unsupported DML") {
     "DML execution is not implemented yet: UPDATE");
 }
 
+TEST_CASE("database evaluates tableless SELECT expressions") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+
+  REQUIRE(database.execute(minidb::parse_statement(
+    "SELECT 1 + 1, 'mini' || 'db', missing_identifier;")) ==
+    "2\tminidb\tNULL");
+}
+
 TEST_CASE("database inserts values and selects rows as TSV") {
   TempDir dir;
   auto database = minidb::Database::create(dir.path);

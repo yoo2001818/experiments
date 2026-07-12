@@ -14,6 +14,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_library(minidb_core
   src/minidb/catalog.cpp
   src/minidb/database.cpp
+  src/minidb/evaluator.cpp
   src/minidb/parser.cpp
   src/minidb/greeting.cpp
   src/minidb/iterator.cpp
@@ -37,6 +38,7 @@ if(BUILD_TESTING)
     tests/ast_test.cpp
     tests/parser_test.cpp
     tests/dml_parser_test.cpp
+    tests/evaluator_test.cpp
     tests/greeting_test.cpp
   )
   target_link_libraries(minidb_tests PRIVATE minidb_core Catch2::Catch2WithMain)

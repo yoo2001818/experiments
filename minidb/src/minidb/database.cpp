@@ -18,6 +18,7 @@
 #include <variant>
 #include <vector>
 
+#include "minidb/evaluator.hpp"
 #include "minidb/iterator.hpp"
 
 namespace minidb {
@@ -567,6 +568,28 @@ std::string Database::execute(const InsertStmt &stmt) {
 }
 
 std::string Database::execute(const SelectStmt &stmt) {
+  if (stmt.from.empty()) {
+    if (stmt.distinct || stmt.where.has_value() || !stmt.order_by.empty() ||
+        stmt.limit.has_value()) {
+      return unsupported_dml(
+          "tableless SELECT only supports an expression list");
+    }
+
+    std::ostringstream out;
+    for (std::size_t i = 0; i < stmt.select_list.size(); i += 1) {
+      const auto *item = std::get_if<ExprSelectItem>(&stmt.select_list[i]);
+      if (item == nullptr) {
+        return unsupported_dml(
+            "tableless SELECT only supports an expression list");
+      }
+      if (i != 0) {
+        out << '\t';
+      }
+      out << render_value(ast_evaluate(item->expr));
+    }
+    return out.str();
+  }
+
   if (stmt.distinct) {
     return unsupported_dml("SELECT DISTINCT is not implemented");
   }

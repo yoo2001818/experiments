@@ -218,17 +218,19 @@ Row Table::decode_row_(std::span<std::byte const> in) {
              in[null_bitmap_offset + static_cast<int>(i / 8)]) &
          (1u << (i % 8))) != 0;
     if (is_null) {
-      row.values.push_back(nullptr);
+      row.values.push_back(NullValue{});
       continue;
     }
 
     const auto offset = static_cast<std::size_t>(column_offsets_[i]);
     switch (column.type) {
     case ColumnType::Integer:
-      row.values.push_back(read_i64_le(in.subspan(offset, 8)));
+      row.values.push_back(
+          IntegerValue{.value = read_i64_le(in.subspan(offset, 8))});
       break;
     case ColumnType::Boolean:
-      row.values.push_back(in[offset] == std::byte{1});
+      row.values.push_back(
+          BooleanValue{.value = in[offset] == std::byte{1}});
       break;
     case ColumnType::Char: {
       const auto size = required_type_size(column);
@@ -237,8 +239,10 @@ Row Table::decode_row_(std::span<std::byte const> in) {
       while (length < bytes.size() && bytes[length] != std::byte{0}) {
         length += 1;
       }
-      row.values.push_back(
-          std::string(reinterpret_cast<const char *>(bytes.data()), length));
+      row.values.push_back(StringValue{.value = std::string(
+                                           reinterpret_cast<const char *>(
+                                               bytes.data()),
+                                           length)});
       break;
     }
     case ColumnType::Binary: {
@@ -248,9 +252,11 @@ Row Table::decode_row_(std::span<std::byte const> in) {
         throw std::runtime_error("invalid binary length in row");
       }
       const auto bytes = in.subspan(offset + 2, length);
-      row.values.push_back(BinaryValue(
-          reinterpret_cast<const std::uint8_t *>(bytes.data()),
-          reinterpret_cast<const std::uint8_t *>(bytes.data() + bytes.size())));
+      row.values.push_back(BinaryValue{.value = std::vector<std::uint8_t>(
+                                           reinterpret_cast<const std::uint8_t *>(
+                                               bytes.data()),
+                                           reinterpret_cast<const std::uint8_t *>(
+                                               bytes.data() + bytes.size()))});
       break;
     }
     }
@@ -267,7 +273,7 @@ void Table::encode_row_(Row &row, std::span<std::byte> out) {
   for (std::size_t i = 0; i < schema_.columns.size(); i += 1) {
     const auto &column = schema_.columns[i];
     const auto &value = row.values[i];
-    const bool is_null = std::holds_alternative<std::nullptr_t>(value);
+    const bool is_null = std::holds_alternative<NullValue>(value);
     if (is_null) {
       if (!column.is_nullable) {
         throw std::runtime_error("column is not nullable: " + column.name);
@@ -280,23 +286,25 @@ void Table::encode_row_(Row &row, std::span<std::byte> out) {
     const auto offset = static_cast<std::size_t>(column_offsets_[i]);
     switch (column.type) {
     case ColumnType::Integer:
-      if (!std::holds_alternative<std::int64_t>(value)) {
+      if (!std::holds_alternative<IntegerValue>(value)) {
         throw std::runtime_error("expected integer for column: " + column.name);
       }
-      write_i64_le(out.subspan(offset, 8), std::get<std::int64_t>(value));
+      write_i64_le(out.subspan(offset, 8),
+                   std::get<IntegerValue>(value).value);
       break;
     case ColumnType::Boolean:
-      if (!std::holds_alternative<bool>(value)) {
+      if (!std::holds_alternative<BooleanValue>(value)) {
         throw std::runtime_error("expected boolean for column: " + column.name);
       }
-      out[offset] = std::get<bool>(value) ? std::byte{1} : std::byte{0};
+      out[offset] = std::get<BooleanValue>(value).value ? std::byte{1}
+                                                       : std::byte{0};
       break;
     case ColumnType::Char: {
-      if (!std::holds_alternative<std::string>(value)) {
+      if (!std::holds_alternative<StringValue>(value)) {
         throw std::runtime_error("expected string for column: " + column.name);
       }
       const auto size = required_type_size(column);
-      const auto &text = std::get<std::string>(value);
+      const auto &text = std::get<StringValue>(value).value;
       if (text.size() > size) {
         throw std::runtime_error("string too long for column: " + column.name);
       }
@@ -309,7 +317,7 @@ void Table::encode_row_(Row &row, std::span<std::byte> out) {
         throw std::runtime_error("expected binary for column: " + column.name);
       }
       const auto size = required_type_size(column);
-      const auto &bytes = std::get<BinaryValue>(value);
+      const auto &bytes = std::get<BinaryValue>(value).value;
       if (bytes.size() > size ||
           bytes.size() > std::numeric_limits<std::uint16_t>::max()) {
         throw std::runtime_error("binary too long for column: " + column.name);

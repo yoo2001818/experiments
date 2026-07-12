@@ -12,33 +12,33 @@ namespace minidb {
 namespace {
 
 bool is_null(const Value &value) {
-  return std::holds_alternative<std::nullptr_t>(value);
+  return std::holds_alternative<NullValue>(value);
 }
 
 std::int64_t require_integer(const Value &value, const char *operation) {
-  const auto *integer = std::get_if<std::int64_t>(&value);
+  const auto *integer = std::get_if<IntegerValue>(&value);
   if (integer == nullptr) {
     throw EvaluationError(std::string(operation) +
                           " requires INTEGER operands");
   }
-  return *integer;
+  return integer->value;
 }
 
 bool require_boolean(const Value &value, const char *operation) {
-  const auto *boolean = std::get_if<bool>(&value);
+  const auto *boolean = std::get_if<BooleanValue>(&value);
   if (boolean == nullptr) {
     throw EvaluationError(std::string(operation) +
                           " requires BOOLEAN operands");
   }
-  return *boolean;
+  return boolean->value;
 }
 
 std::string require_string(const Value &value, const char *operation) {
-  const auto *string = std::get_if<std::string>(&value);
+  const auto *string = std::get_if<StringValue>(&value);
   if (string == nullptr) {
     throw EvaluationError(std::string(operation) + " requires string operands");
   }
-  return *string;
+  return string->value;
 }
 
 std::int64_t parse_integer(const NumericLiteral &literal) {
@@ -57,13 +57,13 @@ Value evaluate_literal(const LiteralExpr &expr) {
       [](const auto &literal) -> Value {
         using T = std::decay_t<decltype(literal)>;
         if constexpr (std::is_same_v<T, NullLiteral>) {
-          return nullptr;
+          return NullValue{};
         } else if constexpr (std::is_same_v<T, NumericLiteral>) {
-          return parse_integer(literal);
+          return IntegerValue{.value = parse_integer(literal)};
         } else if constexpr (std::is_same_v<T, StringLiteral>) {
-          return literal.value;
+          return StringValue{.value = literal.value};
         } else {
-          return literal.value;
+          return BooleanValue{.value = literal.value};
         }
       },
       expr.value);
@@ -72,23 +72,23 @@ Value evaluate_literal(const LiteralExpr &expr) {
 Value evaluate_unary(const UnaryExpr &expr) {
   const Value operand = ast_evaluate(expr.operand);
   if (is_null(operand)) {
-    return nullptr;
+    return NullValue{};
   }
 
   switch (expr.op) {
   case UnaryOperator::Plus:
-    return require_integer(operand, "unary +");
+    return IntegerValue{.value = require_integer(operand, "unary +")};
   case UnaryOperator::Minus: {
     const auto integer = require_integer(operand, "unary -");
     if (integer == std::numeric_limits<std::int64_t>::min()) {
       throw EvaluationError("INTEGER overflow in unary -");
     }
-    return -integer;
+    return IntegerValue{.value = -integer};
   }
   case UnaryOperator::BitwiseNot:
-    return ~require_integer(operand, "~");
+    return IntegerValue{.value = ~require_integer(operand, "~")};
   case UnaryOperator::Not:
-    return !require_boolean(operand, "NOT");
+    return BooleanValue{.value = !require_boolean(operand, "NOT")};
   }
   throw EvaluationError("unknown unary operator");
 }
@@ -100,12 +100,12 @@ Value evaluate_and(const Value &left, const Value &right) {
   const bool right_value =
       right_is_null ? false : require_boolean(right, "AND");
   if ((!left_is_null && !left_value) || (!right_is_null && !right_value)) {
-    return false;
+    return BooleanValue{.value = false};
   }
   if (left_is_null || right_is_null) {
-    return nullptr;
+    return NullValue{};
   }
-  return true;
+  return BooleanValue{.value = true};
 }
 
 Value evaluate_or(const Value &left, const Value &right) {
@@ -114,12 +114,12 @@ Value evaluate_or(const Value &left, const Value &right) {
   const bool left_value = left_is_null ? false : require_boolean(left, "OR");
   const bool right_value = right_is_null ? false : require_boolean(right, "OR");
   if ((!left_is_null && left_value) || (!right_is_null && right_value)) {
-    return true;
+    return BooleanValue{.value = true};
   }
   if (left_is_null || right_is_null) {
-    return nullptr;
+    return NullValue{};
   }
-  return false;
+  return BooleanValue{.value = false};
 }
 
 template <typename Compare>
@@ -127,14 +127,17 @@ Value compare_values(const Value &left, const Value &right, Compare compare) {
   if (left.index() != right.index()) {
     throw EvaluationError("comparison requires operands of the same type");
   }
-  if (const auto *value = std::get_if<std::int64_t>(&left)) {
-    return compare(*value, std::get<std::int64_t>(right));
+  if (const auto *value = std::get_if<IntegerValue>(&left)) {
+    return BooleanValue{
+        .value = compare(value->value, std::get<IntegerValue>(right).value)};
   }
-  if (const auto *value = std::get_if<bool>(&left)) {
-    return compare(*value, std::get<bool>(right));
+  if (const auto *value = std::get_if<BooleanValue>(&left)) {
+    return BooleanValue{
+        .value = compare(value->value, std::get<BooleanValue>(right).value)};
   }
-  if (const auto *value = std::get_if<std::string>(&left)) {
-    return compare(*value, std::get<std::string>(right));
+  if (const auto *value = std::get_if<StringValue>(&left)) {
+    return BooleanValue{
+        .value = compare(value->value, std::get<StringValue>(right).value)};
   }
   throw EvaluationError("unsupported comparison operand type");
 }
@@ -187,15 +190,16 @@ Value evaluate_binary(const BinaryExpr &expr) {
     return evaluate_or(left, right);
   }
   if (is_null(left) || is_null(right)) {
-    return nullptr;
+    return NullValue{};
   }
 
   switch (expr.op) {
   case BinaryOperator::Concat:
-    return require_string(left, "||") + require_string(right, "||");
+    return StringValue{.value = require_string(left, "||") +
+                                require_string(right, "||")};
   case BinaryOperator::Multiply:
-    return checked_multiply(require_integer(left, "*"),
-                            require_integer(right, "*"));
+    return IntegerValue{.value = checked_multiply(require_integer(left, "*"),
+                                                  require_integer(right, "*"))};
   case BinaryOperator::Divide: {
     const auto lhs = require_integer(left, "/");
     const auto rhs = require_integer(right, "/");
@@ -205,7 +209,7 @@ Value evaluate_binary(const BinaryExpr &expr) {
     if (lhs == std::numeric_limits<std::int64_t>::min() && rhs == -1) {
       throw EvaluationError("INTEGER overflow in /");
     }
-    return lhs / rhs;
+    return IntegerValue{.value = lhs / rhs};
   }
   case BinaryOperator::Modulo: {
     const auto lhs = require_integer(left, "%");
@@ -214,19 +218,22 @@ Value evaluate_binary(const BinaryExpr &expr) {
       throw EvaluationError("division by zero");
     }
     if (lhs == std::numeric_limits<std::int64_t>::min() && rhs == -1) {
-      return std::int64_t{0};
+      return IntegerValue{.value = 0};
     }
-    return lhs % rhs;
+    return IntegerValue{.value = lhs % rhs};
   }
   case BinaryOperator::Add:
-    return checked_add(require_integer(left, "+"), require_integer(right, "+"));
+    return IntegerValue{.value = checked_add(require_integer(left, "+"),
+                                             require_integer(right, "+"))};
   case BinaryOperator::Subtract:
-    return checked_subtract(require_integer(left, "-"),
-                            require_integer(right, "-"));
+    return IntegerValue{.value = checked_subtract(require_integer(left, "-"),
+                                                  require_integer(right, "-"))};
   case BinaryOperator::BitwiseAnd:
-    return require_integer(left, "&") & require_integer(right, "&");
+    return IntegerValue{.value = require_integer(left, "&") &
+                                 require_integer(right, "&")};
   case BinaryOperator::BitwiseOr:
-    return require_integer(left, "|") | require_integer(right, "|");
+    return IntegerValue{.value = require_integer(left, "|") |
+                                 require_integer(right, "|")};
   case BinaryOperator::ShiftLeft:
   case BinaryOperator::ShiftRight: {
     const auto lhs = require_integer(left, "shift");
@@ -235,9 +242,10 @@ Value evaluate_binary(const BinaryExpr &expr) {
       throw EvaluationError("shift count is out of range");
     }
     if (expr.op == BinaryOperator::ShiftLeft) {
-      return static_cast<std::int64_t>(static_cast<std::uint64_t>(lhs) << rhs);
+      return IntegerValue{.value = static_cast<std::int64_t>(
+                              static_cast<std::uint64_t>(lhs) << rhs)};
     }
-    return lhs >> rhs;
+    return IntegerValue{.value = lhs >> rhs};
   }
   case BinaryOperator::Less:
     return compare_values(left, right,
@@ -276,7 +284,7 @@ Value ast_evaluate(const Expr &expr) {
         if constexpr (std::is_same_v<T, LiteralExpr>) {
           return evaluate_literal(node);
         } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
-          return nullptr;
+          return NullValue{};
         } else if constexpr (std::is_same_v<T, UnaryExpr>) {
           return evaluate_unary(node);
         } else if constexpr (std::is_same_v<T, BinaryExpr>) {

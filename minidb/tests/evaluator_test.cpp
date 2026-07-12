@@ -23,25 +23,28 @@ minidb::Value evaluate(const std::string &expression) {
 } // namespace
 
 TEST_CASE("evaluate literal arithmetic recursively") {
-  REQUIRE(std::get<std::int64_t>(evaluate("1 + 2 * 3")) == 7);
-  REQUIRE(std::get<std::int64_t>(evaluate("-(10 % 4)")) == -2);
-  REQUIRE(std::get<std::string>(evaluate("'mini' || 'db'")) == "minidb");
+  REQUIRE(std::get<minidb::IntegerValue>(evaluate("1 + 2 * 3")).value == 7);
+  REQUIRE(std::get<minidb::IntegerValue>(evaluate("-(10 % 4)")).value == -2);
+  REQUIRE(std::get<minidb::StringValue>(evaluate("'mini' || 'db'")).value ==
+          "minidb");
 }
 
 TEST_CASE("evaluate comparisons and three-valued boolean expressions") {
-  REQUIRE(std::get<bool>(evaluate("1 + 1 = 2")));
-  REQUIRE(std::get<bool>(evaluate("TRUE AND NOT FALSE")));
-  REQUIRE_FALSE(std::get<bool>(evaluate("FALSE AND NULL")));
-  REQUIRE(std::get<bool>(evaluate("TRUE OR NULL")));
-  REQUIRE(std::holds_alternative<std::nullptr_t>(evaluate("TRUE AND NULL")));
-  REQUIRE(std::holds_alternative<std::nullptr_t>(evaluate("FALSE OR NULL")));
+  REQUIRE(std::get<minidb::BooleanValue>(evaluate("1 + 1 = 2")).value);
+  REQUIRE(std::get<minidb::BooleanValue>(evaluate("TRUE AND NOT FALSE")).value);
+  REQUIRE_FALSE(
+      std::get<minidb::BooleanValue>(evaluate("FALSE AND NULL")).value);
+  REQUIRE(std::get<minidb::BooleanValue>(evaluate("TRUE OR NULL")).value);
+  REQUIRE(std::holds_alternative<minidb::NullValue>(evaluate("TRUE AND NULL")));
+  REQUIRE(std::holds_alternative<minidb::NullValue>(evaluate("FALSE OR NULL")));
 }
 
 TEST_CASE("evaluate nulls and unresolved identifiers as null") {
-  REQUIRE(std::holds_alternative<std::nullptr_t>(evaluate("NULL")));
-  REQUIRE(std::holds_alternative<std::nullptr_t>(evaluate("missing_column")));
+  REQUIRE(std::holds_alternative<minidb::NullValue>(evaluate("NULL")));
   REQUIRE(
-      std::holds_alternative<std::nullptr_t>(evaluate("missing_column + 1")));
+      std::holds_alternative<minidb::NullValue>(evaluate("missing_column")));
+  REQUIRE(std::holds_alternative<minidb::NullValue>(
+      evaluate("missing_column + 1")));
 }
 
 TEST_CASE("reject invalid or unsupported evaluations") {

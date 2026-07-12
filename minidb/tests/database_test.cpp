@@ -322,7 +322,8 @@ TEST_CASE("table row file validates header and stores fixed-width rows") {
   minidb::Table table(schema, dir.path);
   table.create();
   table.insert(minidb::Row{
-    .values = {std::int64_t{7}, std::string{"Ada"}},
+    .values = {minidb::IntegerValue{.value = 7},
+               minidb::StringValue{.value = "Ada"}},
   });
   table.flush();
 
@@ -331,8 +332,8 @@ TEST_CASE("table row file validates header and stores fixed-width rows") {
   REQUIRE(reopened.size() == 1);
   const auto row = reopened.read(0);
   REQUIRE(row.has_value());
-  REQUIRE(std::get<std::int64_t>(row->values.at(0)) == 7);
-  REQUIRE(std::get<std::string>(row->values.at(1)) == "Ada");
+  REQUIRE(std::get<minidb::IntegerValue>(row->values.at(0)).value == 7);
+  REQUIRE(std::get<minidb::StringValue>(row->values.at(1)).value == "Ada");
 
   reopened.delete_row(0);
   REQUIRE_FALSE(reopened.read(0).has_value());
@@ -349,13 +350,15 @@ TEST_CASE("table scan iterates live rows and skips tombstones") {
   REQUIRE_FALSE(empty_scan.next().has_value());
 
   table.insert(minidb::Row{
-    .values = {std::int64_t{1}, std::string{"Ada"}},
+    .values = {minidb::IntegerValue{.value = 1},
+               minidb::StringValue{.value = "Ada"}},
   });
   table.insert(minidb::Row{
-    .values = {std::int64_t{2}, nullptr},
+    .values = {minidb::IntegerValue{.value = 2}, minidb::NullValue{}},
   });
   table.insert(minidb::Row{
-    .values = {std::int64_t{3}, std::string{"Grace"}},
+    .values = {minidb::IntegerValue{.value = 3},
+               minidb::StringValue{.value = "Grace"}},
   });
   table.delete_row(1);
 
@@ -368,13 +371,14 @@ TEST_CASE("table scan iterates live rows and skips tombstones") {
 
   const auto& first = entries.at(0);
   REQUIRE(first.row_offset == 0);
-  REQUIRE(std::get<std::int64_t>(first.row.values.at(0)) == 1);
-  REQUIRE(std::get<std::string>(first.row.values.at(1)) == "Ada");
+  REQUIRE(std::get<minidb::IntegerValue>(first.row.values.at(0)).value == 1);
+  REQUIRE(std::get<minidb::StringValue>(first.row.values.at(1)).value == "Ada");
 
   const auto& second = entries.at(1);
   REQUIRE(second.row_offset == 2);
-  REQUIRE(std::get<std::int64_t>(second.row.values.at(0)) == 3);
-  REQUIRE(std::get<std::string>(second.row.values.at(1)) == "Grace");
+  REQUIRE(std::get<minidb::IntegerValue>(second.row.values.at(0)).value == 3);
+  REQUIRE(std::get<minidb::StringValue>(second.row.values.at(1)).value ==
+          "Grace");
 
   auto scan = table.scan().begin();
   const auto next_first = scan.next();
@@ -394,10 +398,12 @@ TEST_CASE("table scan iterator supports manual increment") {
   minidb::Table table(schema, dir.path);
   table.create();
   table.insert(minidb::Row{
-    .values = {std::int64_t{1}, std::string{"Ada"}},
+    .values = {minidb::IntegerValue{.value = 1},
+               minidb::StringValue{.value = "Ada"}},
   });
   table.insert(minidb::Row{
-    .values = {std::int64_t{2}, std::string{"Grace"}},
+    .values = {minidb::IntegerValue{.value = 2},
+               minidb::StringValue{.value = "Grace"}},
   });
 
   auto scan = table.scan();
@@ -420,15 +426,17 @@ TEST_CASE("table scan next helper remains available") {
   minidb::Table table(schema, dir.path);
   table.create();
   table.insert(minidb::Row{
-    .values = {std::int64_t{1}, std::string{"Ada"}},
+    .values = {minidb::IntegerValue{.value = 1},
+               minidb::StringValue{.value = "Ada"}},
   });
 
   auto scan = table.scan().begin();
   const auto first = scan.next();
   REQUIRE(first.has_value());
   REQUIRE(first->row_offset == 0);
-  REQUIRE(std::get<std::int64_t>(first->row.values.at(0)) == 1);
-  REQUIRE(std::get<std::string>(first->row.values.at(1)) == "Ada");
+  REQUIRE(std::get<minidb::IntegerValue>(first->row.values.at(0)).value == 1);
+  REQUIRE(std::get<minidb::StringValue>(first->row.values.at(1)).value ==
+          "Ada");
   REQUIRE_FALSE(scan.next().has_value());
 }
 

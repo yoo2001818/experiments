@@ -260,23 +260,23 @@ std::int64_t parse_i64_literal(const std::string &text) {
 
 Value literal_insert_value(const LiteralValue &literal) {
   if (std::holds_alternative<NullLiteral>(literal)) {
-    return nullptr;
+    return NullValue{};
   }
   if (const auto *number = std::get_if<NumericLiteral>(&literal)) {
-    return parse_i64_literal(number->text);
+    return IntegerValue{.value = parse_i64_literal(number->text)};
   }
   if (const auto *text = std::get_if<StringLiteral>(&literal)) {
-    return text->value;
+    return StringValue{.value = text->value};
   }
   if (const auto *boolean = std::get_if<BooleanLiteral>(&literal)) {
-    return boolean->value;
+    return BooleanValue{.value = boolean->value};
   }
   throw std::runtime_error("unsupported literal for INSERT");
 }
 
 Value insert_value_to_value(const InsertValue &insert_value) {
   if (std::holds_alternative<DefaultValue>(insert_value)) {
-    return nullptr;
+    return NullValue{};
   }
 
   const auto &expr = *std::get<ExprPtr>(insert_value);
@@ -290,7 +290,7 @@ Value insert_value_to_value(const InsertValue &insert_value) {
 std::string render_binary(const BinaryValue &bytes) {
   std::ostringstream out;
   out << "0x";
-  for (const auto byte : bytes) {
+  for (const auto byte : bytes.value) {
     out << std::hex << std::setw(2) << std::setfill('0')
         << static_cast<int>(byte);
   }
@@ -298,17 +298,17 @@ std::string render_binary(const BinaryValue &bytes) {
 }
 
 std::string render_value(const Value &value) {
-  if (std::holds_alternative<std::nullptr_t>(value)) {
+  if (std::holds_alternative<NullValue>(value)) {
     return "NULL";
   }
-  if (const auto *integer = std::get_if<std::int64_t>(&value)) {
-    return std::to_string(*integer);
+  if (const auto *integer = std::get_if<IntegerValue>(&value)) {
+    return std::to_string(integer->value);
   }
-  if (const auto *boolean = std::get_if<bool>(&value)) {
-    return *boolean ? "TRUE" : "FALSE";
+  if (const auto *boolean = std::get_if<BooleanValue>(&value)) {
+    return boolean->value ? "TRUE" : "FALSE";
   }
-  if (const auto *text = std::get_if<std::string>(&value)) {
-    return *text;
+  if (const auto *text = std::get_if<StringValue>(&value)) {
+    return text->value;
   }
   if (const auto *bytes = std::get_if<BinaryValue>(&value)) {
     return render_binary(*bytes);
@@ -556,7 +556,7 @@ std::string Database::execute(const InsertStmt &stmt) {
     }
 
     Row row;
-    row.values.assign(schema.columns.size(), nullptr);
+    row.values.assign(schema.columns.size(), NullValue{});
     for (std::size_t i = 0; i < value_row.size(); i += 1) {
       row.values[target_indexes[i]] = insert_value_to_value(value_row[i]);
     }

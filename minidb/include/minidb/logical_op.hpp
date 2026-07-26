@@ -6,13 +6,18 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
 namespace minidb {
 
+class BinderError : public std::runtime_error {
+public:
+  explicit BinderError(std::string message);
+};
+
 struct FrameColumnDescriptor {
-  std::uint32_t index;
   std::string name;
   ExprPtr expr;
   bool visible;
@@ -25,6 +30,7 @@ public:
   virtual ~LogicalOp() = default;
 
   virtual FrameDescriptor get_frame() = 0;
+  virtual std::optional<RefSlot> get_column(ExprPtr expr) = 0;
 };
 
 using LogicalOpPtr = std::shared_ptr<LogicalOp>;
@@ -34,6 +40,8 @@ public:
   explicit ScanLogicalOp(Table &table);
 
   FrameDescriptor get_frame() override;
+  std::optional<RefSlot> get_column(ExprPtr expr) override;
+  // TODO: table can have multiple names and aliases
 
 private:
   struct ScanFrameColumnDescriptor {
@@ -50,6 +58,7 @@ public:
   explicit FilterLogicalOp(LogicalOpPtr parent, ExprPtr expr);
 
   FrameDescriptor get_frame() override;
+  std::optional<RefSlot> get_column(ExprPtr expr) override;
 
 private:
   LogicalOpPtr parent_;
@@ -61,6 +70,7 @@ public:
   explicit ProjectLogicalOp(LogicalOpPtr parent, FrameDescriptor &frame);
 
   FrameDescriptor get_frame() override;
+  std::optional<RefSlot> get_column(ExprPtr expr) override;
 
 private:
   LogicalOpPtr parent_;
@@ -73,6 +83,7 @@ public:
                          std::vector<OrderByTerm> &order_by);
 
   FrameDescriptor get_frame() override;
+  std::optional<RefSlot> get_column(ExprPtr expr) override;
 
 private:
   struct SortTermDescriptor {

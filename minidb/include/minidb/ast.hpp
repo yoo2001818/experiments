@@ -212,6 +212,8 @@ struct Expr {
                             BetweenExpr, InExpr, LikeExpr, CaseExpr>;
 
   Node node;
+
+  bool operator==(const Expr &other) const;
 };
 
 struct WildcardSelectItem {

@@ -12,6 +12,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(minidb_core
+  src/minidb/ast.cpp
   src/minidb/ast_rewrite.cpp
   src/minidb/catalog.cpp
   src/minidb/database.cpp
@@ -19,6 +20,7 @@ add_library(minidb_core
   src/minidb/parser.cpp
   src/minidb/greeting.cpp
   src/minidb/iterator.cpp
+  src/minidb/logical_op.cpp
   src/minidb/storage.cpp
   src/minidb/table.cpp
   src/minidb/util_binary.cpp
@@ -42,6 +44,7 @@ if(BUILD_TESTING)
     tests/dml_parser_test.cpp
     tests/evaluator_test.cpp
     tests/greeting_test.cpp
+    tests/logical_op_test.cpp
   )
   target_link_libraries(minidb_tests PRIVATE minidb_core Catch2::Catch2WithMain)
 

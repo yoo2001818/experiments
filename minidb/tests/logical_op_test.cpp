@@ -202,3 +202,29 @@ TEST_CASE("logical operator binding rejects unknown identifiers") {
   REQUIRE_THROWS_AS(minidb::FilterLogicalOp(scan, identifier({"missing"})),
                     minidb::BinderError);
 }
+
+TEST_CASE("join binding keeps lazy child frame references stable") {
+  minidb::Table users(users_schema(), std::filesystem::path{"unused"});
+  auto employee = std::make_shared<minidb::ScanLogicalOp>(users, "employee");
+  auto manager = std::make_shared<minidb::ScanLogicalOp>(users, "manager");
+
+  auto join = std::make_shared<minidb::JoinLogicalOp>(
+      employee, manager, minidb::JoinType::Inner,
+      binary(identifier({"employee", "id"}), minidb::BinaryOperator::Equal,
+             identifier({"manager", "id"})));
+
+  REQUIRE(join->get_column(identifier({"employee", "name"}))->index == 2);
+  REQUIRE(join->get_column(identifier({"manager", "name"}))->index == 3);
+  REQUIRE_THROWS_AS(join->get_column(identifier({"id"})), minidb::BinderError);
+
+  const auto frame = join->get_frame();
+  REQUIRE(frame.size() == 4);
+  REQUIRE(frame[0].name == "id");
+  REQUIRE(ref_index(frame[0].expr) == 0);
+  REQUIRE(frame[1].name == "id");
+  REQUIRE(ref_index(frame[1].expr) == 2);
+  REQUIRE(frame[2].name == "name");
+  REQUIRE(ref_index(frame[2].expr) == 1);
+  REQUIRE(frame[3].name == "name");
+  REQUIRE(ref_index(frame[3].expr) == 3);
+}

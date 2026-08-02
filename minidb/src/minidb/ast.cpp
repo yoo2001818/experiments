@@ -1,5 +1,7 @@
 #include "minidb/ast.hpp"
 
+#include <sstream>
+#include <string_view>
 #include <type_traits>
 #include <variant>
 
@@ -51,6 +53,85 @@ bool literal_equal(const LiteralValue &left, const LiteralValue &right) {
         }
       },
       left, right);
+}
+
+std::string identifier_text(const Identifier &identifier) {
+  std::ostringstream out;
+  for (std::size_t index = 0; index < identifier.parts.size(); ++index) {
+    if (index != 0) {
+      out << '.';
+    }
+    out << identifier.parts[index];
+  }
+  return out.str();
+}
+
+std::string unary_operator_text(UnaryOperator op) {
+  switch (op) {
+  case UnaryOperator::Plus:
+    return "+";
+  case UnaryOperator::Minus:
+    return "-";
+  case UnaryOperator::BitwiseNot:
+    return "~";
+  case UnaryOperator::Not:
+    return "NOT ";
+  }
+  return "?";
+}
+
+std::string binary_operator_text(BinaryOperator op) {
+  switch (op) {
+  case BinaryOperator::Concat:
+    return "||";
+  case BinaryOperator::Multiply:
+    return "*";
+  case BinaryOperator::Divide:
+    return "/";
+  case BinaryOperator::Modulo:
+    return "%";
+  case BinaryOperator::Add:
+    return "+";
+  case BinaryOperator::Subtract:
+    return "-";
+  case BinaryOperator::BitwiseAnd:
+    return "&";
+  case BinaryOperator::BitwiseOr:
+    return "|";
+  case BinaryOperator::ShiftLeft:
+    return "<<";
+  case BinaryOperator::ShiftRight:
+    return ">>";
+  case BinaryOperator::Less:
+    return "<";
+  case BinaryOperator::Greater:
+    return ">";
+  case BinaryOperator::LessEqual:
+    return "<=";
+  case BinaryOperator::GreaterEqual:
+    return ">=";
+  case BinaryOperator::Equal:
+    return "=";
+  case BinaryOperator::NotEqual:
+    return "<>";
+  case BinaryOperator::And:
+    return "AND";
+  case BinaryOperator::Or:
+    return "OR";
+  }
+  return "?";
+}
+
+std::string quote_string(std::string_view value) {
+  std::string result{"'"};
+  for (const char ch : value) {
+    result += ch;
+    if (ch == '\'') {
+      result += '\'';
+    }
+  }
+  result += '\'';
+  return result;
 }
 
 } // namespace
@@ -116,6 +197,96 @@ bool Expr::operator==(const Expr &other) const {
         }
       },
       node, other.node);
+}
+
+std::string format_expression(const ExprPtr &expr) {
+  if (expr == nullptr) {
+    return "<null-expr>";
+  }
+
+  return std::visit(
+      [](const auto &node) -> std::string {
+        using T = std::decay_t<decltype(node)>;
+        if constexpr (std::is_same_v<T, LiteralExpr>) {
+          return std::visit(
+              [](const auto &literal) -> std::string {
+                using Literal = std::decay_t<decltype(literal)>;
+                if constexpr (std::is_same_v<Literal, NullLiteral>) {
+                  return "NULL";
+                } else if constexpr (std::is_same_v<Literal, NumericLiteral>) {
+                  return literal.text;
+                } else if constexpr (std::is_same_v<Literal, StringLiteral>) {
+                  return quote_string(literal.value);
+                } else {
+                  return literal.value ? "TRUE" : "FALSE";
+                }
+              },
+              node.value);
+        } else if constexpr (std::is_same_v<T, IdentifierExpr>) {
+          return identifier_text(node.name);
+        } else if constexpr (std::is_same_v<T, BoundRefExpr>) {
+          return "#" + std::to_string(node.ref.index);
+        } else if constexpr (std::is_same_v<T, UnaryExpr>) {
+          return "(" + unary_operator_text(node.op) +
+                 format_expression(node.operand) + ")";
+        } else if constexpr (std::is_same_v<T, BinaryExpr>) {
+          return "(" + format_expression(node.left) + " " +
+                 binary_operator_text(node.op) + " " +
+                 format_expression(node.right) + ")";
+        } else if constexpr (std::is_same_v<T, FunctionCallExpr>) {
+          std::ostringstream out;
+          out << identifier_text(node.function_name) << '(';
+          for (std::size_t index = 0; index < node.arguments.size(); ++index) {
+            if (index != 0) {
+              out << ", ";
+            }
+            out << format_expression(node.arguments[index]);
+          }
+          out << ')';
+          return out.str();
+        } else if constexpr (std::is_same_v<T, IsExpr>) {
+          return "(" + format_expression(node.value) + " IS " +
+                 (node.negated ? "NOT " : "") + format_expression(node.test) +
+                 ")";
+        } else if constexpr (std::is_same_v<T, BetweenExpr>) {
+          return "(" + format_expression(node.value) +
+                 (node.negated ? " NOT BETWEEN " : " BETWEEN ") +
+                 format_expression(node.lower) + " AND " +
+                 format_expression(node.upper) + ")";
+        } else if constexpr (std::is_same_v<T, InExpr>) {
+          std::ostringstream out;
+          out << '(' << format_expression(node.value)
+              << (node.negated ? " NOT IN (" : " IN (");
+          for (std::size_t index = 0; index < node.values.size(); ++index) {
+            if (index != 0) {
+              out << ", ";
+            }
+            out << format_expression(node.values[index]);
+          }
+          out << "))";
+          return out.str();
+        } else if constexpr (std::is_same_v<T, LikeExpr>) {
+          return "(" + format_expression(node.value) +
+                 (node.negated ? " NOT LIKE " : " LIKE ") +
+                 format_expression(node.pattern) + ")";
+        } else {
+          std::ostringstream out;
+          out << "CASE";
+          if (node.operand.has_value()) {
+            out << ' ' << format_expression(*node.operand);
+          }
+          for (const auto &clause : node.when_clauses) {
+            out << " WHEN " << format_expression(clause.condition) << " THEN "
+                << format_expression(clause.result);
+          }
+          if (node.else_expr.has_value()) {
+            out << " ELSE " << format_expression(*node.else_expr);
+          }
+          out << " END";
+          return out.str();
+        }
+      },
+      expr->node);
 }
 
 } // namespace minidb

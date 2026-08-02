@@ -216,6 +216,8 @@ struct Expr {
   bool operator==(const Expr &other) const;
 };
 
+std::string format_expression(const ExprPtr &expr);
+
 struct WildcardSelectItem {
   std::optional<Identifier> qualifier;
 };
@@ -230,6 +232,19 @@ using SelectItem = std::variant<WildcardSelectItem, ExprSelectItem>;
 struct TableReference {
   Identifier table_name;
   std::optional<std::string> alias;
+};
+
+enum class JoinType {
+  Cross,
+  Inner,
+  Left,
+  Right,
+  Full,
+};
+
+struct JoinClause {
+  JoinType type;
+  std::optional<ExprPtr> condition;
 };
 
 struct OrderByTerm {
@@ -248,9 +263,14 @@ struct SelectStmt {
   bool distinct = false;
   std::vector<SelectItem> select_list;
   std::vector<TableReference> from;
+  std::vector<JoinClause> joins;
   std::optional<ExprPtr> where;
   std::vector<OrderByTerm> order_by;
   std::optional<LimitClause> limit;
+};
+
+struct ExplainStmt {
+  std::shared_ptr<SelectStmt> select;
 };
 
 struct DefaultValue {};
@@ -313,6 +333,6 @@ using DmlStatement =
 
 using Statement =
     std::variant<CreateTableStmt, CreateIndexStmt, DropTableStmt, DropIndexStmt,
-                 SelectStmt, InsertStmt, UpdateStmt, DeleteStmt>;
+                 SelectStmt, ExplainStmt, InsertStmt, UpdateStmt, DeleteStmt>;
 
 } // namespace minidb

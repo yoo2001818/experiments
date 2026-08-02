@@ -315,6 +315,51 @@ TEST_CASE("database reports unsupported DML shapes") {
     "unsupported DML: SELECT requires exactly one table");
 }
 
+TEST_CASE("database explains bound SELECT plans with aliases and joins") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+  database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER, name CHAR(16));"));
+  database.execute(minidb::parse_statement(
+    "CREATE TABLE accounts (user_id INTEGER, balance INTEGER);"));
+
+  const auto plan = database.execute(minidb::parse_statement(R"sql(
+    EXPLAIN
+    SELECT u.name, a.balance AS dollars
+    FROM users u
+    LEFT JOIN accounts a ON u.id = a.user_id
+    WHERE a.balance > 0
+    ORDER BY u.id DESC
+    LIMIT 5;
+  )sql"));
+
+  REQUIRE(plan.find("Limit count=5") != std::string::npos);
+  REQUIRE(plan.find("Sort keys=[#2 DESC]") != std::string::npos);
+  REQUIRE(plan.find("Project") != std::string::npos);
+  REQUIRE(plan.find("#2 <expression> <- #0 hidden") != std::string::npos);
+  REQUIRE(plan.find("Filter predicate=(#2 > 0)") != std::string::npos);
+  REQUIRE(plan.find("LeftJoin condition=(#0 = #1)") != std::string::npos);
+  REQUIRE(plan.find("Scan table=users alias=u") != std::string::npos);
+  REQUIRE(plan.find("frame=[#0 u.id <- #0, #1 u.name <- #1]") !=
+    std::string::npos);
+  REQUIRE(plan.find("Scan table=accounts alias=a") != std::string::npos);
+}
+
+TEST_CASE("logical planning rejects ambiguous and hidden table names") {
+  TempDir dir;
+  auto database = minidb::Database::create(dir.path);
+  database.execute(minidb::parse_statement(
+    "CREATE TABLE users (id INTEGER, name CHAR(16));"));
+  database.execute(minidb::parse_statement(
+    "CREATE TABLE teams (id INTEGER, name CHAR(16));"));
+
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "EXPLAIN SELECT id FROM users u JOIN teams t ON u.id = t.id;")),
+    minidb::BinderError);
+  REQUIRE_THROWS_AS(database.execute(minidb::parse_statement(
+    "EXPLAIN SELECT users.id FROM users u;")), minidb::BinderError);
+}
+
 TEST_CASE("table row file validates header and stores fixed-width rows") {
   TempDir dir;
   const auto schema = users_schema();

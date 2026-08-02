@@ -54,6 +54,7 @@ enum class TokenKind {
   Char,
   Comment,
   Create,
+  Cross,
   Default,
   Delete,
   Desc,
@@ -61,17 +62,22 @@ enum class TokenKind {
   Drop,
   Else,
   End,
+  Explain,
   Exists,
   False,
+  Full,
   From,
   If,
   In,
   Index,
+  Inner,
   Insert,
   Integer,
   Into,
   Is,
+  Join,
   Key,
+  Left,
   Like,
   Limit,
   Not,
@@ -80,7 +86,9 @@ enum class TokenKind {
   On,
   Or,
   Order,
+  Outer,
   Primary,
+  Right,
   Row,
   Select,
   Set,
@@ -192,6 +200,8 @@ const char *token_name(TokenKind kind) {
     return "COMMENT";
   case TokenKind::Create:
     return "CREATE";
+  case TokenKind::Cross:
+    return "CROSS";
   case TokenKind::Default:
     return "DEFAULT";
   case TokenKind::Delete:
@@ -206,10 +216,14 @@ const char *token_name(TokenKind kind) {
     return "ELSE";
   case TokenKind::End:
     return "END";
+  case TokenKind::Explain:
+    return "EXPLAIN";
   case TokenKind::Exists:
     return "EXISTS";
   case TokenKind::False:
     return "FALSE";
+  case TokenKind::Full:
+    return "FULL";
   case TokenKind::From:
     return "FROM";
   case TokenKind::If:
@@ -218,6 +232,8 @@ const char *token_name(TokenKind kind) {
     return "IN";
   case TokenKind::Index:
     return "INDEX";
+  case TokenKind::Inner:
+    return "INNER";
   case TokenKind::Insert:
     return "INSERT";
   case TokenKind::Integer:
@@ -226,8 +242,12 @@ const char *token_name(TokenKind kind) {
     return "INTO";
   case TokenKind::Is:
     return "IS";
+  case TokenKind::Join:
+    return "JOIN";
   case TokenKind::Key:
     return "KEY";
+  case TokenKind::Left:
+    return "LEFT";
   case TokenKind::Like:
     return "LIKE";
   case TokenKind::Limit:
@@ -244,8 +264,12 @@ const char *token_name(TokenKind kind) {
     return "OR";
   case TokenKind::Order:
     return "ORDER";
+  case TokenKind::Outer:
+    return "OUTER";
   case TokenKind::Primary:
     return "PRIMARY";
+  case TokenKind::Right:
+    return "RIGHT";
   case TokenKind::Row:
     return "ROW";
   case TokenKind::Select:
@@ -300,6 +324,8 @@ TokenKind keyword_kind(std::string_view value) {
     return TokenKind::Comment;
   if (keyword == "CREATE")
     return TokenKind::Create;
+  if (keyword == "CROSS")
+    return TokenKind::Cross;
   if (keyword == "DEFAULT")
     return TokenKind::Default;
   if (keyword == "DELETE")
@@ -314,10 +340,14 @@ TokenKind keyword_kind(std::string_view value) {
     return TokenKind::Else;
   if (keyword == "END")
     return TokenKind::End;
+  if (keyword == "EXPLAIN")
+    return TokenKind::Explain;
   if (keyword == "EXISTS")
     return TokenKind::Exists;
   if (keyword == "FALSE")
     return TokenKind::False;
+  if (keyword == "FULL")
+    return TokenKind::Full;
   if (keyword == "FROM")
     return TokenKind::From;
   if (keyword == "IF")
@@ -326,6 +356,8 @@ TokenKind keyword_kind(std::string_view value) {
     return TokenKind::In;
   if (keyword == "INDEX")
     return TokenKind::Index;
+  if (keyword == "INNER")
+    return TokenKind::Inner;
   if (keyword == "INSERT")
     return TokenKind::Insert;
   if (keyword == "INTEGER")
@@ -334,8 +366,12 @@ TokenKind keyword_kind(std::string_view value) {
     return TokenKind::Into;
   if (keyword == "IS")
     return TokenKind::Is;
+  if (keyword == "JOIN")
+    return TokenKind::Join;
   if (keyword == "KEY")
     return TokenKind::Key;
+  if (keyword == "LEFT")
+    return TokenKind::Left;
   if (keyword == "LIKE")
     return TokenKind::Like;
   if (keyword == "LIMIT")
@@ -352,8 +388,12 @@ TokenKind keyword_kind(std::string_view value) {
     return TokenKind::Or;
   if (keyword == "ORDER")
     return TokenKind::Order;
+  if (keyword == "OUTER")
+    return TokenKind::Outer;
   if (keyword == "PRIMARY")
     return TokenKind::Primary;
+  if (keyword == "RIGHT")
+    return TokenKind::Right;
   if (keyword == "ROW")
     return TokenKind::Row;
   if (keyword == "SELECT")
@@ -711,6 +751,14 @@ private:
 
     if (check(TokenKind::Select))
       return parse_select();
+    if (match(TokenKind::Explain)) {
+      if (!check(TokenKind::Select)) {
+        throw error("expected SELECT after EXPLAIN");
+      }
+      return ExplainStmt{
+          .select = std::make_shared<SelectStmt>(parse_select()),
+      };
+    }
     if (check(TokenKind::Insert))
       return parse_insert();
     if (check(TokenKind::Update))
@@ -905,9 +953,8 @@ private:
     } while (match(TokenKind::Comma));
 
     if (match(TokenKind::From)) {
-      do {
-        stmt.from.push_back(parse_table_reference());
-      } while (match(TokenKind::Comma));
+      stmt.from.push_back(parse_table_reference());
+      parse_joins(stmt);
     }
 
     if (match(TokenKind::Where)) {
@@ -916,6 +963,49 @@ private:
 
     parse_order_by_and_limit(stmt.order_by, stmt.limit);
     return stmt;
+  }
+
+  void parse_joins(SelectStmt &stmt) {
+    while (true) {
+      JoinType type;
+      bool explicit_join = true;
+      if (match(TokenKind::Comma)) {
+        type = JoinType::Cross;
+        explicit_join = false;
+      } else if (match(TokenKind::Join)) {
+        type = JoinType::Inner;
+      } else if (match(TokenKind::Inner)) {
+        expect(TokenKind::Join);
+        type = JoinType::Inner;
+      } else if (match(TokenKind::Cross)) {
+        expect(TokenKind::Join);
+        type = JoinType::Cross;
+      } else if (match(TokenKind::Left)) {
+        match(TokenKind::Outer);
+        expect(TokenKind::Join);
+        type = JoinType::Left;
+      } else if (match(TokenKind::Right)) {
+        match(TokenKind::Outer);
+        expect(TokenKind::Join);
+        type = JoinType::Right;
+      } else if (match(TokenKind::Full)) {
+        match(TokenKind::Outer);
+        expect(TokenKind::Join);
+        type = JoinType::Full;
+      } else {
+        return;
+      }
+
+      stmt.from.push_back(parse_table_reference());
+      JoinClause join{.type = type};
+      if (type != JoinType::Cross) {
+        expect(TokenKind::On);
+        join.condition = parse_expr();
+      } else if (explicit_join && check(TokenKind::On)) {
+        throw error("CROSS JOIN does not accept an ON clause");
+      }
+      stmt.joins.push_back(std::move(join));
+    }
   }
 
   SelectItem parse_select_item() {

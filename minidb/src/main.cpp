@@ -88,7 +88,8 @@ bool run_dot_command(std::string_view command) {
       << "  .quit   Exit the REPL\n"
       << "  .exit   Exit the REPL\n"
       << "\n"
-      << "Enter SQL statements terminated by ';'.\n";
+      << "Enter SQL statements terminated by ';'.\n"
+      << "Use EXPLAIN SELECT ...; to display a logical plan.\n";
     return true;
   }
 

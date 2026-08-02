@@ -381,6 +381,11 @@ std::string Database::execute(const Statement &stmt) {
           return execute(DdlStatement{statement});
         } else if constexpr (std::is_same_v<StatementType, SelectStmt>) {
           return execute(statement);
+        } else if constexpr (std::is_same_v<StatementType, ExplainStmt>) {
+          if (statement.select == nullptr) {
+            throw std::runtime_error("EXPLAIN has no SELECT statement");
+          }
+          return explain(*statement.select);
         } else if constexpr (std::is_same_v<StatementType, InsertStmt>) {
           return execute(statement);
         } else {
@@ -389,6 +394,22 @@ std::string Database::execute(const Statement &stmt) {
         }
       },
       stmt);
+}
+
+LogicalOpPtr Database::logical_plan(const SelectStmt &stmt) {
+  return make_logical_plan(stmt, [&](const Identifier &identifier) -> Table & {
+    const auto table_name = require_single_part_name(identifier, "table");
+    auto table = tables_.find(table_name);
+    if (table == tables_.end()) {
+      throw BinderError("unknown table: " + table_name);
+    }
+    return table->second;
+  });
+}
+
+std::string Database::explain(const SelectStmt &stmt) {
+  auto plan = logical_plan(stmt);
+  return format_logical_plan(*plan);
 }
 
 std::string Database::create_table(const CreateTableStmt &stmt) {

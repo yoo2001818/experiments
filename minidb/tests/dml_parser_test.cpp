@@ -61,6 +61,8 @@ TEST_CASE("parse SELECT wildcard projection aliases clauses and limits") {
     std::vector<std::string>{"users"});
   REQUIRE(select.from.at(0).alias == "u");
   REQUIRE(select.from.at(1).alias == "a");
+  REQUIRE(select.joins.size() == 1);
+  REQUIRE(select.joins[0].type == minidb::JoinType::Cross);
 
   REQUIRE(select.where.has_value());
   const auto& where = node<minidb::BinaryExpr>(*select.where);
@@ -77,6 +79,47 @@ TEST_CASE("parse SELECT wildcard projection aliases clauses and limits") {
   REQUIRE(node<minidb::LiteralExpr>(select.limit->row_count).value.index() ==
     1);
   REQUIRE(select.limit->offset.has_value());
+}
+
+TEST_CASE("parse EXPLAIN SELECT with aliases and joins") {
+  const auto statement = minidb::parse_statement(R"sql(
+    EXPLAIN SELECT u.id, a.balance
+    FROM users AS u
+    LEFT OUTER JOIN accounts a ON u.id = a.user_id
+    CROSS JOIN regions r;
+  )sql");
+
+  const auto &explain = std::get<minidb::ExplainStmt>(statement);
+  REQUIRE(explain.select != nullptr);
+  REQUIRE(explain.select->from.size() == 3);
+  REQUIRE(explain.select->from[0].alias == "u");
+  REQUIRE(explain.select->from[1].alias == "a");
+  REQUIRE(explain.select->from[2].alias == "r");
+  REQUIRE(explain.select->joins.size() == 2);
+  REQUIRE(explain.select->joins[0].type == minidb::JoinType::Left);
+  REQUIRE(explain.select->joins[0].condition.has_value());
+  REQUIRE(explain.select->joins[1].type == minidb::JoinType::Cross);
+  REQUIRE_FALSE(explain.select->joins[1].condition.has_value());
+}
+
+TEST_CASE("parse inner right and full joins") {
+  const auto statement = minidb::parse_dml_statement(R"sql(
+    SELECT *
+    FROM a
+    INNER JOIN b ON a.id = b.a_id
+    RIGHT OUTER JOIN c ON b.id = c.b_id
+    FULL JOIN d ON c.id = d.c_id;
+  )sql");
+
+  const auto &select = as<minidb::SelectStmt>(statement);
+  REQUIRE(select.from.size() == 4);
+  REQUIRE(select.joins.size() == 3);
+  REQUIRE(select.joins[0].type == minidb::JoinType::Inner);
+  REQUIRE(select.joins[1].type == minidb::JoinType::Right);
+  REQUIRE(select.joins[2].type == minidb::JoinType::Full);
+  REQUIRE(select.joins[0].condition.has_value());
+  REQUIRE(select.joins[1].condition.has_value());
+  REQUIRE(select.joins[2].condition.has_value());
 }
 
 TEST_CASE("parse expression predicates and case expressions") {
@@ -195,5 +238,8 @@ TEST_CASE("DML parser reports errors") {
   REQUIRE_THROWS_AS(minidb::parse_dml_statement("SELECT 1 2 3;"),
     minidb::ParseError);
   REQUIRE_THROWS_AS(minidb::parse_dml_statement("CREATE TABLE t (id INTEGER);"),
+    minidb::ParseError);
+  REQUIRE_THROWS_AS(minidb::parse_statement(
+    "SELECT * FROM users CROSS JOIN accounts ON users.id = accounts.id;"),
     minidb::ParseError);
 }

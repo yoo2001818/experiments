@@ -2,6 +2,7 @@
 
 #include "minidb/ast.hpp"
 #include "minidb/catalog.hpp"
+#include "minidb/logical_op.hpp"
 #include "minidb/table.hpp"
 #include <filesystem>
 #include <string>
@@ -23,6 +24,8 @@ public:
 
   std::string execute(Statement const &stmt);
   std::string execute(DdlStatement const &stmt);
+  LogicalOpPtr logical_plan(SelectStmt const &stmt);
+  std::string explain(SelectStmt const &stmt);
 
   std::string create_table(CreateTableStmt const &stmt);
   std::string create_index(CreateIndexStmt const &stmt);
